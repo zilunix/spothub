@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Tag образа (обычно SHA из тестового депло€ или test-latest)'
+        description: 'Tag образа дл€ PROD (обычно latest или SHA коммита)'
         required: false
-        default: 'test-latest'
+        default: 'latest'
 
 jobs:
   deploy-prod:
@@ -20,21 +20,20 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Sync prod manifests
-        run: |
-          ./scripts/sync-env.sh prod
+      # Ќикакого sync-env Ч манифесты уже лежат в кластере как нужно
 
       - name: Deploy frontend to PROD namespace
         run: |
-          TAG="${IMAGE_TAG:-test-latest}"
+          TAG="${IMAGE_TAG:-latest}"
           IMAGE="${DOCKERHUB_USERNAME}/full-mvp-frontend:${TAG}"
           echo "Deploying image to PROD: $IMAGE"
+          # им€ контейнера внутри deployment мы уже провер€ли: frontend
           kubectl set image deployment/sporthub-frontend frontend=$IMAGE -n sporthub-prod
           kubectl rollout status deployment/sporthub-frontend -n sporthub-prod
 
       - name: Smoke test frontend in PROD
         run: |
+          # ѕросто проверим, что по сервису frontend отдаетс€ главна€ страница
           kubectl run frontend-smoke-prod --rm -i --restart=Never \
             --image=curlimages/curl -n sporthub-prod -- \
-            curl -fsS http://sporthub-frontend:80/ || \
-            echo "Frontend root returned non-2xx but pod is reachable"
+            curl -fsS http://sporthub-frontend
