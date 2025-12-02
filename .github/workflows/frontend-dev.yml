@@ -1,0 +1,75 @@
+name: CI/CD Frontend Dev
+
+on:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-dev.yml"
+  pull_request:
+    branches: [ "dev" ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+  build-and-push:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:dev-latest
+
+  deploy-dev:
+    needs: build-and-push
+    runs-on: [self-hosted, spothub-1]
+    if: github.ref == 'refs/heads/dev'
+
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Deploy frontend to DEV namespace
+        run: |
+          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-frontend:${{ github.sha }}"
+          echo "Deploying image to DEV: $IMAGE"
+          kubectl set image deployment/sporthub-frontend frontend=$IMAGE -n sporthub-dev
+          kubectl rollout status deployment/sporthub-frontend -n sporthub-dev
