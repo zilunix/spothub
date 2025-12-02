@@ -1,4 +1,4 @@
-name: CI/CD Frontend Dev
+name: CI Frontend Dev
 
 on:
   push:
@@ -54,22 +54,3 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:${{ github.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:dev-latest
-
-  deploy-dev:
-    needs: build-and-push
-    runs-on: [self-hosted, spothub-1]
-    if: github.ref == 'refs/heads/dev'
-
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Deploy frontend to DEV namespace
-        run: |
-          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-frontend:${{ github.sha }}"
-          echo "Deploying image to DEV: $IMAGE"
-          kubectl set image deployment/sporthub-frontend frontend=$IMAGE -n sporthub-dev
-          kubectl rollout status deployment/sporthub-frontend -n sporthub-dev

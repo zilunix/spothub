@@ -1,4 +1,4 @@
-name: CI/CD Backend Dev
+name: CI Backend Dev
 
 on:
   push:
@@ -57,22 +57,3 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend:${{ github.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend:dev-latest
-
-  deploy-dev:
-    needs: build-and-push
-    runs-on: [self-hosted, spothub-1]
-    if: github.ref == 'refs/heads/dev'
-
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Deploy backend to DEV namespace
-        run: |
-          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-backend:${{ github.sha }}"
-          echo "Deploying image to DEV: $IMAGE"
-          kubectl set image deployment/sporthub-backend backend=$IMAGE -n sporthub-dev
-          kubectl rollout status deployment/sporthub-backend -n sporthub-dev

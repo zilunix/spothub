@@ -1,0 +1,29 @@
+name: Deploy Frontend to Dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag образа (по умолчанию dev-latest)'
+        required: false
+        default: 'dev-latest'
+
+jobs:
+  deploy-dev:
+    runs-on: [self-hosted, spothub-1]
+
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Deploy frontend to DEV namespace
+        run: |
+          TAG="${IMAGE_TAG:-dev-latest}"
+          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-frontend:${TAG}"
+          echo "Deploying image to DEV: $IMAGE"
+          kubectl set image deployment/sporthub-frontend frontend=$IMAGE -n sporthub-dev
+          kubectl rollout status deployment/sporthub-frontend -n sporthub-dev
