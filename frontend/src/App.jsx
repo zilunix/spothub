@@ -17,7 +17,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Загрузка лиг
+  // Загрузка лиг при старте
   useEffect(() => {
     (async () => {
       try {
@@ -26,7 +26,6 @@ export default function App() {
         setLeagues(data);
 
         if (Array.isArray(data) && data.length > 0) {
-          // выбираем первую лигу
           setSelectedLeague(data[0].id ?? data[0].code ?? "");
         } else {
           setSelectedLeague("");
@@ -34,13 +33,13 @@ export default function App() {
       } catch (e) {
         console.error("Failed to load leagues", e);
         setError(`Ошибка загрузки лиг: ${e.message}`);
-        setLeagues([]); // чтобы дальше .map не падал
+        setLeagues([]);
         setSelectedLeague("");
       }
     })();
   }, []);
 
-  // Загрузка матчей при смене лиги/даты
+  // Загрузка матчей
   useEffect(() => {
     if (!selectedLeague) return;
 
@@ -49,12 +48,7 @@ export default function App() {
     (async () => {
       try {
         const data = await fetchMatches(selectedLeague, dateStr);
-        console.log(
-          "Matches loaded:",
-          data,
-          "isArray:",
-          Array.isArray(data)
-        );
+        console.log("Matches loaded:", data, "isArray:", Array.isArray(data));
         setMatches(data);
       } catch (e) {
         console.error("Failed to load matches", e);
@@ -70,7 +64,9 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>SportHub</h1>
-        <p className="subtitle">MVP-панель матчей (Kubernetes домашняя лаба)</p>
+        <p className="subtitle">
+          MVP-панель матчей (Kubernetes домашняя лаба)
+        </p>
       </header>
 
       <section className="controls">
@@ -80,16 +76,11 @@ export default function App() {
             value={selectedLeague}
             onChange={(e) => setSelectedLeague(e.target.value)}
           >
-            {/* Если лиги ещё не загрузились или пусты */}
             {!Array.isArray(leagues) || leagues.length === 0 ? (
               <option value="">Нет доступных лиг</option>
             ) : (
-              Array.isArray(leagues) &&
               leagues.map((l) => (
-                <option
-                  key={l.id ?? l.code}
-                  value={l.id ?? l.code ?? ""}
-                >
+                <option key={l.id ?? l.code} value={l.id ?? l.code ?? ""}>
                   {l.name ?? l.code ?? "Без названия"}
                 </option>
               ))
@@ -115,20 +106,53 @@ export default function App() {
           <div className="info">Нет матчей для выбранной лиги и даты.</div>
         )}
 
-        {!loading && !error && Array.isArray(matches) && matches.length > 0 && (
-          <table className="matches-table">
-            <thead>
-              <tr>
-                <th>Лига</th>
-                <th>Матч</th>
-                <th>Время</th>
-                <th>Статус</th>
-                <th>Счёт</th>
-              </tr>
-            </thead>
-            <tbody>
-              {matches.map((m) => (
-                <tr key={m.id ?? `${m.home_team}-${m.away_team}-${m.start_time}`}>
-                  <td>{String(selectedLeague).toUpperCase()}</td>
-                  <td>
-                    {m.home_team} vs {m.away_te
+        {!loading &&
+          !error &&
+          Array.isArray(matches) &&
+          matches.length > 0 && (
+            <table className="matches-table">
+              <thead>
+                <tr>
+                  <th>Лига</th>
+                  <th>Матч</th>
+                  <th>Время</th>
+                  <th>Статус</th>
+                  <th>Счёт</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matches.map((m) => (
+                  <tr
+                    key={
+                      m.id ??
+                      `${m.home_team}-${m.away_team}-${m.start_time}`
+                    }
+                  >
+                    <td>
+                      {selectedLeague
+                        ? String(selectedLeague).toUpperCase()
+                        : ""}
+                    </td>
+                    <td>
+                      {m.home_team} vs {m.away_team}
+                    </td>
+                    <td>{m.start_time}</td>
+                    <td>{m.status}</td>
+                    <td>
+                      {m.score_home == null || m.score_away == null
+                        ? "-"
+                        : `${m.score_home}:${m.score_away}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+      </section>
+
+      <footer className="footer">
+        <span>SportHub MVP · Kubernetes homelab</span>
+      </footer>
+    </div>
+  );
+}
