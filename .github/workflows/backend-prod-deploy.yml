@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Tag образа (обычно SHA из тестового деплоя или test-latest)'
+        description: 'Tag образа для PROD (обычно latest или SHA коммита)'
         required: false
-        default: 'test-latest'
+        default: 'latest'
 
 jobs:
   deploy-prod:
@@ -26,7 +26,8 @@ jobs:
 
       - name: Deploy backend to PROD namespace
         run: |
-          TAG="${IMAGE_TAG:-test-latest}"
+          # Если тег не передали вручную при запуске workflow – используем latest
+          TAG="${IMAGE_TAG:-latest}"
           IMAGE="${DOCKERHUB_USERNAME}/full-mvp-backend:${TAG}"
           echo "Deploying image to PROD: $IMAGE"
           kubectl set image deployment/sporthub-backend backend=$IMAGE -n sporthub-prod
@@ -36,4 +37,4 @@ jobs:
         run: |
           kubectl run backend-smoke-prod --rm -i --restart=Never \
             --image=curlimages/curl -n sporthub-prod -- \
-            curl -fsS http://sporthub-backend:8000/healthz
+            curl -fsS http://sporthub-backend:8000/health
