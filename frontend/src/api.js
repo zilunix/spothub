@@ -1,5 +1,11 @@
-const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, '') || '/api';
+let API_BASE =
+  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "/api";
+
+export function setApiBase(base) {
+  if (typeof base === "string" && base.trim()) {
+    API_BASE = base.replace(/\/$/, "");
+  }
+}
 
 async function request(path, params = {}) {
   const url = new URL(API_BASE + path, window.location.origin);
@@ -11,8 +17,8 @@ async function request(path, params = {}) {
 
   const resp = await fetch(url, {
     headers: {
-      "Accept": "application/json"
-    }
+      Accept: "application/json",
+    },
   });
 
   if (!resp.ok) {
@@ -23,10 +29,38 @@ async function request(path, params = {}) {
   return resp.json();
 }
 
-export function fetchLeagues() {
-  return request("/leagues");
+export async function fetchLeagues() {
+  const data = await request("/leagues");
+  console.log("fetchLeagues raw:", data, "isArray:", Array.isArray(data));
+
+  // 1) backend вернул сразу массив
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  // 2) backend вернул объект вида { leagues: [...] }
+  if (data && Array.isArray(data.leagues)) {
+    return data.leagues;
+  }
+
+  // 3) заглушка на случай любого другого ответа, чтобы .map не падал
+  return [];
 }
 
-export function fetchMatches(league, dateStr) {
-  return request("/matches", { league, date_str: dateStr });
+export async function fetchMatches(league, dateStr) {
+  const data = await request("/matches", { league, date_str: dateStr });
+  console.log("fetchMatches raw:", data, "isArray:", Array.isArray(data));
+
+  // 1) backend вернул сразу массив матчей
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  // 2) backend вернул объект вида { matches: [...] }
+  if (data && Array.isArray(data.matches)) {
+    return data.matches;
+  }
+
+  // 3) заглушка
+  return [];
 }

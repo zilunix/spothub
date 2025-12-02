@@ -1,0 +1,39 @@
+name: Deploy Backend to Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag образа (обычно SHA из тестового деплоя или test-latest)'
+        required: false
+        default: 'test-latest'
+
+jobs:
+  deploy-prod:
+    runs-on: [self-hosted, spothub-1]
+
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Sync prod manifests
+        run: |
+          ./scripts/sync-env.sh prod
+
+      - name: Deploy backend to PROD namespace
+        run: |
+          TAG="${IMAGE_TAG:-test-latest}"
+          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-backend:${TAG}"
+          echo "Deploying image to PROD: $IMAGE"
+          kubectl set image deployment/sporthub-backend backend=$IMAGE -n sporthub-prod
+          kubectl rollout status deployment/sporthub-backend -n sporthub-prod
+
+      - name: Smoke test backend in PROD
+        run: |
+          kubectl run backend-smoke-prod --rm -i --restart=Never \
+            --image=curlimages/curl -n sporthub-prod -- \
+            curl -fsS http://sporthub-backend:8000/healthz

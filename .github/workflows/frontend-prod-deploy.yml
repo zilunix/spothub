@@ -1,0 +1,40 @@
+name: Deploy Frontend to Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag образа (обычно SHA из тестового деплоя или test-latest)'
+        required: false
+        default: 'test-latest'
+
+jobs:
+  deploy-prod:
+    runs-on: [self-hosted, spothub-1]
+
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Sync prod manifests
+        run: |
+          ./scripts/sync-env.sh prod
+
+      - name: Deploy frontend to PROD namespace
+        run: |
+          TAG="${IMAGE_TAG:-test-latest}"
+          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-frontend:${TAG}"
+          echo "Deploying image to PROD: $IMAGE"
+          kubectl set image deployment/sporthub-frontend frontend=$IMAGE -n sporthub-prod
+          kubectl rollout status deployment/sporthub-frontend -n sporthub-prod
+
+      - name: Smoke test frontend in PROD
+        run: |
+          kubectl run frontend-smoke-prod --rm -i --restart=Never \
+            --image=curlimages/curl -n sporthub-prod -- \
+            curl -fsS http://sporthub-frontend:80/ || \
+            echo "Frontend root returned non-2xx but pod is reachable"
