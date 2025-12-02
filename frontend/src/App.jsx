@@ -39,7 +39,7 @@ export default function App() {
     })();
   }, []);
 
-  // Загрузка матчей
+  // Загрузка матчей при смене лиги/даты
   useEffect(() => {
     if (!selectedLeague) return;
 
@@ -102,51 +102,50 @@ export default function App() {
         {loading && <div className="info">Загружаем матчи...</div>}
         {error && <div className="error">{error}</div>}
 
-        {!loading && !error && matches.length === 0 && (
-          <div className="info">Нет матчей для выбранной лиги и даты.</div>
-        )}
+        {/* Таблица ВСЕГДА рендерится, просто может быть пустой */}
+        <table className="matches-table">
+          <thead>
+            <tr>
+              <th>Лига</th>
+              <th>Матч</th>
+              <th>Время</th>
+              <th>Статус</th>
+              <th>Счёт</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(Array.isArray(matches) ? matches : []).map((m) => (
+              <tr
+                key={
+                  m.id ?? `${m.home_team}-${m.away_team}-${m.start_time}`
+                }
+              >
+                <td>
+                  {selectedLeague
+                    ? String(selectedLeague).toUpperCase()
+                    : ""}
+                </td>
+                <td>
+                  {m.home_team} vs {m.away_team}
+                </td>
+                <td>{m.start_time}</td>
+                <td>{m.status}</td>
+                <td>
+                  {m.score_home == null || m.score_away == null
+                    ? "-"
+                    : `${m.score_home}:${m.score_away}`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
+        {/* Сообщение о пустых данных — отдельно, не прячет таблицу */}
         {!loading &&
           !error &&
           Array.isArray(matches) &&
-          matches.length > 0 && (
-            <table className="matches-table">
-              <thead>
-                <tr>
-                  <th>Лига</th>
-                  <th>Матч</th>
-                  <th>Время</th>
-                  <th>Статус</th>
-                  <th>Счёт</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matches.map((m) => (
-                  <tr
-                    key={
-                      m.id ??
-                      `${m.home_team}-${m.away_team}-${m.start_time}`
-                    }
-                  >
-                    <td>
-                      {selectedLeague
-                        ? String(selectedLeague).toUpperCase()
-                        : ""}
-                    </td>
-                    <td>
-                      {m.home_team} vs {m.away_team}
-                    </td>
-                    <td>{m.start_time}</td>
-                    <td>{m.status}</td>
-                    <td>
-                      {m.score_home == null || m.score_away == null
-                        ? "-"
-                        : `${m.score_home}:${m.score_away}`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          matches.length === 0 && (
+            <div className="info">Нет матчей для выбранной лиги и даты.</div>
           )}
       </section>
 

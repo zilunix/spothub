@@ -33,17 +33,17 @@ export async function fetchLeagues() {
   const data = await request("/leagues");
   console.log("fetchLeagues raw:", data, "isArray:", Array.isArray(data));
 
-  // 1) backend вернул сразу массив
+  // 1) backend РІРµСЂРЅСѓР» СЃСЂР°Р·Сѓ РјР°СЃСЃРёРІ
   if (Array.isArray(data)) {
     return data;
   }
 
-  // 2) backend вернул объект вида { leagues: [...] }
+  // 2) backend РІРµСЂРЅСѓР» РѕР±СЉРµРєС‚ РІРёРґР° { leagues: [...] }
   if (data && Array.isArray(data.leagues)) {
     return data.leagues;
   }
 
-  // 3) заглушка на случай любого другого ответа, чтобы .map не падал
+  // 3) Р·Р°РіР»СѓС€РєР° РЅР° СЃР»СѓС‡Р°Р№ Р»СЋР±РѕРіРѕ РґСЂСѓРіРѕРіРѕ РѕС‚РІРµС‚Р°, С‡С‚РѕР±С‹ .map РЅРµ РїР°РґР°Р»
   return [];
 }
 
@@ -51,16 +51,16 @@ export async function fetchMatches(league, dateStr) {
   const data = await request("/matches", { league, date_str: dateStr });
   console.log("fetchMatches raw:", data, "isArray:", Array.isArray(data));
 
-  // 1) backend вернул сразу массив матчей
+  // 1) backend РІРµСЂРЅСѓР» СЃСЂР°Р·Сѓ РјР°СЃСЃРёРІ РјР°С‚С‡РµР№
   if (Array.isArray(data)) {
     return data;
   }
 
-  // 2) backend вернул объект вида { matches: [...] }
+  // 2) backend РІРµСЂРЅСѓР» РѕР±СЉРµРєС‚ РІРёРґР° { matches: [...] }
   if (data && Array.isArray(data.matches)) {
     return data.matches;
   }
 
-  // 3) заглушка
+  // 3) Р·Р°РіР»СѓС€РєР°
   return [];
 }
