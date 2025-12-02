@@ -20,13 +20,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Sync prod manifests
-        run: |
-          ./scripts/sync-env.sh prod
+      # Ўаг sync-env убрали Ч манифесты уже лежат в кластере как надо
 
       - name: Deploy backend to PROD namespace
         run: |
-          # ≈сли тег не передали вручную при запуске workflow Ц используем latest
           TAG="${IMAGE_TAG:-latest}"
           IMAGE="${DOCKERHUB_USERNAME}/full-mvp-backend:${TAG}"
           echo "Deploying image to PROD: $IMAGE"
