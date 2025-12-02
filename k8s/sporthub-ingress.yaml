@@ -1,27 +1,128 @@
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sporthub-ingress
-  namespace: sporthub
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  name: sporthub-ingress-frontend
+  namespace: sporthub-dev
 spec:
   ingressClassName: nginx
   rules:
-    - host: sporthub.local
+    - host: dev.sporthub.local
       http:
         paths:
-          - path: /(api)(/|$)(.*)
-            pathType: Prefix
-            backend:
-              service:
-                name: sporthub-backend
-                port:
-                  number: 8000
-          - path: /()(.*)
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: sporthub-frontend
                 port:
                   number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sporthub-ingress-api
+  namespace: sporthub-dev
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: dev.sporthub.local
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: sporthub-backend
+                port:
+                  number: 8000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sporthub-ingress-frontend
+  namespace: sporthub-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: test.sporthub.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sporthub-frontend
+                port:
+                  number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sporthub-ingress-api
+  namespace: sporthub-test
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: test.sporthub.local
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: sporthub-backend
+                port:
+                  number: 8000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sporthub-ingress-frontend
+  namespace: sporthub-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: sporthub.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sporthub-frontend
+                port:
+                  number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sporthub-ingress-api
+  namespace: sporthub-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: sporthub.local
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: sporthub-backend
+                port:
+                  number: 8000
