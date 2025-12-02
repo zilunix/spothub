@@ -31,13 +31,14 @@ async function request(path, params = {}) {
 
 export async function fetchLeagues() {
   const data = await request("/leagues");
+  console.log("fetchLeagues raw:", data, "isArray:", Array.isArray(data));
 
-  // 1) если backend вернул сразу массив
+  // 1) backend вернул сразу массив
   if (Array.isArray(data)) {
     return data;
   }
 
-  // 2) если backend вернул объект вида { leagues: [...] }
+  // 2) backend вернул объект вида { leagues: [...] }
   if (data && Array.isArray(data.leagues)) {
     return data.leagues;
   }
@@ -46,6 +47,20 @@ export async function fetchLeagues() {
   return [];
 }
 
-export function fetchMatches(league, dateStr) {
-  return request("/matches", { league, date_str: dateStr });
+export async function fetchMatches(league, dateStr) {
+  const data = await request("/matches", { league, date_str: dateStr });
+  console.log("fetchMatches raw:", data, "isArray:", Array.isArray(data));
+
+  // 1) backend вернул сразу массив матчей
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  // 2) backend вернул объект вида { matches: [...] }
+  if (data && Array.isArray(data.matches)) {
+    return data.matches;
+  }
+
+  // 3) заглушка
+  return [];
 }

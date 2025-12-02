@@ -17,20 +17,30 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Загрузка лиг
   useEffect(() => {
     (async () => {
       try {
         const data = await fetchLeagues();
+        console.log("Leagues loaded:", data, "isArray:", Array.isArray(data));
         setLeagues(data);
-        if (data.length > 0) {
-          setSelectedLeague(data[0].id);
+
+        if (Array.isArray(data) && data.length > 0) {
+          // выбираем первую лигу
+          setSelectedLeague(data[0].id ?? data[0].code ?? "");
+        } else {
+          setSelectedLeague("");
         }
       } catch (e) {
+        console.error("Failed to load leagues", e);
         setError(`Ошибка загрузки лиг: ${e.message}`);
+        setLeagues([]); // чтобы дальше .map не падал
+        setSelectedLeague("");
       }
     })();
   }, []);
 
+  // Загрузка матчей при смене лиги/даты
   useEffect(() => {
     if (!selectedLeague) return;
 
@@ -39,8 +49,15 @@ export default function App() {
     (async () => {
       try {
         const data = await fetchMatches(selectedLeague, dateStr);
+        console.log(
+          "Matches loaded:",
+          data,
+          "isArray:",
+          Array.isArray(data)
+        );
         setMatches(data);
       } catch (e) {
+        console.error("Failed to load matches", e);
         setError(`Ошибка загрузки матчей: ${e.message}`);
         setMatches([]);
       } finally {
@@ -63,11 +80,20 @@ export default function App() {
             value={selectedLeague}
             onChange={(e) => setSelectedLeague(e.target.value)}
           >
-            {leagues.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
+            {/* Если лиги ещё не загрузились или пусты */}
+            {!Array.isArray(leagues) || leagues.length === 0 ? (
+              <option value="">Нет доступных лиг</option>
+            ) : (
+              Array.isArray(leagues) &&
+              leagues.map((l) => (
+                <option
+                  key={l.id ?? l.code}
+                  value={l.id ?? l.code ?? ""}
+                >
+                  {l.name ?? l.code ?? "Без названия"}
+                </option>
+              ))
+            )}
           </select>
         </div>
 
@@ -89,7 +115,7 @@ export default function App() {
           <div className="info">Нет матчей для выбранной лиги и даты.</div>
         )}
 
-        {!loading && !error && matches.length > 0 && (
+        {!loading && !error && Array.isArray(matches) && matches.length > 0 && (
           <table className="matches-table">
             <thead>
               <tr>
@@ -102,28 +128,7 @@ export default function App() {
             </thead>
             <tbody>
               {matches.map((m) => (
-                <tr key={m.id}>
-                  <td>{selectedLeague.toUpperCase()}</td>
+                <tr key={m.id ?? `${m.home_team}-${m.away_team}-${m.start_time}`}>
+                  <td>{String(selectedLeague).toUpperCase()}</td>
                   <td>
-                    {m.home_team} vs {m.away_team}
-                  </td>
-                  <td>{m.start_time}</td>
-                  <td>{m.status}</td>
-                  <td>
-                    {m.score_home == null || m.score_away == null
-                      ? "-"
-                      : `${m.score_home}:${m.score_away}`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <footer className="footer">
-        <span>SportHub MVP · Kubernetes homelab</span>
-      </footer>
-    </div>
-  );
-}
+                    {m.home_team} vs {m.away_te
