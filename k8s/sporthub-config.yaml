@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sporthub-config
+  namespace: sporthub
+data:
+  SPORTS_API_BASE_URL: ""
+  DEFAULT_LEAGUES: "nhl,apl"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sporthub-secrets
+  namespace: sporthub
+type: Opaque
+data:
+  SPORTS_API_KEY: ""  # base64 от ключа, если используешь внешний API

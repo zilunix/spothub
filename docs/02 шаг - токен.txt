@@ -1,0 +1,2 @@
+vagrant@k8s-master-1:~$ sudo kubeadm token create --print-join-command
+kubeadm join 192.168.56.11:6443 --token tik8l4.ckb3xgt7ma0vsrxp --discovery-token-ca-cert-hash sha256:0c8ac5ab7d03f211d9f7269d44e0fa35e5c5e786cc743dc05d4981186524c8d6
