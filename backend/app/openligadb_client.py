@@ -1,4 +1,3 @@
-# app/openligadb_client.py
 from __future__ import annotations
 
 import datetime as dt
@@ -39,12 +38,9 @@ class OpenLigaDBClient:
             resp.raise_for_status()
             return resp.json()
 
-
     async def get_leagues(self, shortcuts: List[str]) -> List[Dict[str, Any]]:
         """
-        Вернуть список лиг по их leagueShortcut.
-
-        Использует эндпоинт /getavailableleagues и фильтрует по нужным шорткатам.
+        Получить список лиг и отфильтровать по нужным shortcut’ам.
         """
         raw = await self._get("/getavailableleagues")
         shortcuts_lower = [s.lower() for s in shortcuts]
@@ -68,6 +64,17 @@ class OpenLigaDBClient:
         result.sort(key=lambda x: shortcuts_lower.index(x["id"]))
         return result
 
+    async def get_season_raw(self, league: str, season: int) -> List[Dict[str, Any]]:
+        """
+        Получить СЫРЫЕ матчи сезона для лиги без фильтрации по дате.
+
+        Используется для /board и архивных эндпоинтов.
+        """
+        raw = await self._get(f"/getmatchdata/{league}/{season}")
+        if not isinstance(raw, list):
+            return []
+        return raw
+
     async def get_matches_for_date(
         self,
         league: str,
@@ -85,8 +92,8 @@ class OpenLigaDBClient:
         if season is None:
             season = date.year if date.month >= 7 else date.year - 1
 
-        # /getmatchdata/{LeagueShortcut}/{LeagueSeason}
-        raw = await self._get(f"/getmatchdata/{league}/{season}")
+        # Берём все матчи сезона и фильтруем по дате
+        raw = await self.get_season_raw(league, season)
 
         matches: List[Match] = []
 
