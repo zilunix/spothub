@@ -22,3 +22,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: sporthub-config
+            - secretRef:
+                name: sporthub-postgres-secret
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@sporthub-postgres:5432/$(POSTGRES_DB)"
