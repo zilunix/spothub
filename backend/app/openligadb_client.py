@@ -34,10 +34,11 @@ class OpenLigaDBClient:
     async def _get(self, path: str) -> Any:
         """Внутренний метод для GET-запросов."""
         url = f"{self.base_url}{path}"
-        async with httpx.AsyncClient(timeout=15,follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             return resp.json()
+
 
     async def get_leagues(self, shortcuts: List[str]) -> List[Dict[str, Any]]:
         """
