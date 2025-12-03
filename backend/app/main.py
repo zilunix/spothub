@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .settings import settings
 from .openligadb_client import OpenLigaDBClient
+from app.clients.openligadb_client import OpenLigaDBClient
 from .sports_api import (
     router as sports_router,
     get_client,
@@ -69,9 +70,8 @@ async def legacy_matches(
         date_str=date_str,
         client=client,
     )
-@app.on_event("startup")
-async def _startup():
-    print(
-        f"[settings] OpenLigaDB base={settings.api_base_url} "
-        f"leagues={settings.default_leagues} season={settings.default_season}"
-    )
+@app.get("/debug/openligadb/ping")
+async def debug_openligadb_ping():
+    client = OpenLigaDBClient()
+    data = await client.get_available_groups("bl1", 2024)
+    return {"ok": True, "groups_count": len(data)}
