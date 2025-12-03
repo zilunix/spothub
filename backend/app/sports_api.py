@@ -277,3 +277,53 @@ async def get_archive_seasons(
     # сортируем по убыванию (новые сезоны первыми)
     seasons_sorted = sorted(seasons_set, reverse=True)
     return seasons_sorted
+
+
+@router.get(
+    "/archive/{league}/{season}/matches",
+    response_model=List[MatchSummary],
+    summary="Матчи выбранной лиги и сезона (архив)",
+)
+async def get_archive_matches(
+    league: str,
+    season: int,
+    client: OpenLigaDBClient = Depends(get_client),
+) -> List[MatchSummary]:
+    """
+    Архивные матчи для конкретной лиги и сезона.
+
+    Берём сырые матчи сезона из OpenLigaDB и приводим к MatchSummary.
+    """
+    league = league.lower()
+
+    try:
+        raw_matches = await client.get_season_raw(league, season)
+    except Exception as exc:
+        logger.exception(
+            "Не удалось получить архивные матчи (league=%s, season=%s): %s",
+            league,
+            season,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (archive/matches)",
+        )
+
+    if not raw_matches:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Для лиги '{league}' и сезона {season} матчи не найдены",
+        )
+
+    now = dt.datetime.now(dt.timezone.utc)
+
+    summaries: List[MatchSummary] = []
+    for rm in raw_matches:
+        ms = classify_match(rm, now)
+        summaries.append(ms)
+
+    # сортируем по времени начала
+    summaries.sort(key=lambda x: x.kickoff_utc)
+
+    return summaries
