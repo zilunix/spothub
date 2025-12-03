@@ -4,9 +4,12 @@ import React from "react";
 function formatKickoff(kickoffUtc) {
   if (!kickoffUtc) return "-";
   const d = new Date(kickoffUtc);
+
+  // Локальное время пользователя
   return d.toLocaleString(undefined, {
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -25,10 +28,6 @@ function formatStatus(status) {
   }
 }
 
-/**
- * ИМЕНОВАННЫЙ экспорт MatchesTable — то, что важно для импорта:
- * import { MatchesTable } from "./MatchesTable";
- */
 export function MatchesTable({ matches }) {
   if (!matches || matches.length === 0) {
     return <div>Нет матчей для отображения.</div>;
@@ -39,11 +38,12 @@ export function MatchesTable({ matches }) {
       <thead>
         <tr>
           <th>Лига</th>
+          <th>Сезон</th>
           <th>Тур</th>
           <th>Команда 1</th>
           <th>Команда 2</th>
           <th>Счёт</th>
-          <th>Время</th>
+          <th>Время начала</th>
           <th>Статус</th>
         </tr>
       </thead>
@@ -51,6 +51,7 @@ export function MatchesTable({ matches }) {
         {matches.map((m) => (
           <tr key={m.id}>
             <td>{m.league_shortcut}</td>
+            <td>{m.league_season}</td>
             <td>{m.group_order_id}</td>
             <td>{m.team1_name}</td>
             <td>{m.team2_name}</td>
