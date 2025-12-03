@@ -32,21 +32,4 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend:${{ github.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend:latest
 
-  deploy:
-    needs: build-and-push
-    runs-on: [self-hosted, spothub-1]
-    if: github.ref == 'refs/heads/main'
-
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Deploy backend to Kubernetes
-        run: |
-          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-backend:${{ github.sha }}"
-          echo "Deploying image: $IMAGE"
-          kubectl set image deployment/sporthub-backend backend=$IMAGE -n sporthub
-          kubectl rollout status deployment/sporthub-backend -n sporthub
+  
