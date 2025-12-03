@@ -187,3 +187,34 @@ async def get_board(
         upcoming=upcoming,
     )
 
+# ================== /archive ==================
+
+
+@router.get(
+    "/archive/leagues",
+    summary="Список лиг для архивов",
+)
+async def get_archive_leagues(
+    client: OpenLigaDBClient = Depends(get_client),
+) -> List[dict]:
+    """
+    Архивный список лиг.
+
+    Пока что это те же самые лиги, что и для основного режима:
+    берём шорткаты из DEFAULT_LEAGUES и дергаем OpenLigaDB.
+    В будущем сюда можно будет прикрутить БД.
+    """
+    shortcuts = cfg.get_default_leagues_list()
+    if not shortcuts:
+        raise HTTPException(status_code=500, detail="DEFAULT_LEAGUES is not configured")
+
+    try:
+        leagues = await client.get_leagues(shortcuts)
+        return leagues
+    except Exception as exc:
+        logger.exception("Не удалось получить архивные лиги из OpenLigaDB: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (archive/leagues)",
+        )
+
