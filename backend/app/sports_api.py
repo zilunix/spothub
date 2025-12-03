@@ -7,9 +7,12 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from . import config as cfg
+from .db import get_db
 from .openligadb_client import Match, OpenLigaDBClient
+from .repositories.matches import bulk_upsert_matches_from_board
 from .schemas.match import MatchSummary, MatchStatus, classify_match
 
 router = APIRouter(prefix="/api", tags=["sports"])
@@ -123,34 +126,20 @@ async def get_board(
         le=30,
         description="Сколько дней вперёд смотреть матчи",
     ),
+    db: Session = Depends(get_db),
     client: OpenLigaDBClient = Depends(get_client),
 ) -> BoardResponse:
     """
     Эндпоинт /board: live / upcoming / recent матчи.
 
     Берём сезоны для лиг по умолчанию (DEFAULT_LEAGUES, DEFAULT_SEASON),
-    загружаем все матчи сезона и классифицируем их.
+    загружаем все матчи сезона, классифицируем и ПАРАЛЛЕЛЬНО сохраняем
+    их в базу данных.
     """
     now = dt.datetime.now(dt.timezone.utc)
 
     leagues = cfg.get_default_leagues_list()
     season = cfg.DEFAULT_SEASON
-
-    all_matches: List[MatchSummary] = []
-
-    try:
-        # Для каждой лиги тянем матчи сезона и классифицируем
-        for lg in leagues:
-            raw_matches = await client.get_season_raw(lg, season)
-            for rm in raw_matches:
-                ms = classify_match(rm, now)
-                all_matches.append(ms)
-    except Exception as exc:
-        logger.exception("Не удалось получить матчи для /board из OpenLigaDB: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail="Ошибка при обращении к внешнему API OpenLigaDB (board)",
-        )
 
     ahead = days_ahead
     back = days_back
@@ -159,15 +148,54 @@ async def get_board(
     upcoming: List[MatchSummary] = []
     recent: List[MatchSummary] = []
 
-    for m in all_matches:
-        if m.status == MatchStatus.LIVE:
-            live.append(m)
-        elif m.status == MatchStatus.SCHEDULED:
-            if now <= m.kickoff_utc <= now + dt.timedelta(days=ahead):
-                upcoming.append(m)
-        elif m.status == MatchStatus.FINISHED:
-            if now - dt.timedelta(days=back) <= m.kickoff_utc <= now:
-                recent.append(m)
+    try:
+        # Для каждой лиги тянем матчи сезона, классифицируем
+        # и сохраняем в БД
+        for lg in leagues:
+            raw_matches = await client.get_season_raw(lg, season)
+
+            league_summaries: List[MatchSummary] = []
+            for rm in raw_matches:
+                ms = classify_match(rm, now)
+                league_summaries.append(ms)
+
+            # Сохраняем/обновляем эти матчи в БД.
+            # На этом шаге ошибки БД логируем, но не ломаем сам /board,
+            # чтобы фронт не страдал, если Postgres временно недоступен.
+            try:
+                if league_summaries:
+                    bulk_upsert_matches_from_board(
+                        db=db,
+                        league_shortcut=lg,
+                        league_name=lg,  # пока используем shortcut как name
+                        season_year=season,
+                        matches=[m.model_dump() for m in league_summaries],
+                    )
+            except Exception as db_exc:
+                logger.exception(
+                    "Ошибка при сохранении матчей лиги %s сезона %s в БД: %s",
+                    lg,
+                    season,
+                    db_exc,
+                )
+
+            # Классифицируем по live / upcoming / recent в рамках окна
+            for m in league_summaries:
+                if m.status == MatchStatus.LIVE:
+                    live.append(m)
+                elif m.status == MatchStatus.SCHEDULED:
+                    if now <= m.kickoff_utc <= now + dt.timedelta(days=ahead):
+                        upcoming.append(m)
+                elif m.status == MatchStatus.FINISHED:
+                    if now - dt.timedelta(days=back) <= m.kickoff_utc <= now:
+                        recent.append(m)
+
+    except Exception as exc:
+        logger.exception("Не удалось получить матчи для /board из OpenLigaDB: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (board)",
+        )
 
     # Сортировки
     live.sort(key=lambda x: x.kickoff_utc)

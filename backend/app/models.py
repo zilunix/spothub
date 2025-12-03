@@ -1,56 +1,58 @@
-from logging.config import fileConfig
+# app/models.py
+from sqlalchemy import (
+    Column,
+    Integer,
+    BigInteger,
+    String,
+    Boolean,
+    ForeignKey,
+    DateTime,
+    JSON,
+)
+from sqlalchemy.orm import declarative_base, relationship
 
-from sqlalchemy import engine_from_config, pool
-from alembic import context
-
-# <-- наше:
-from app.models import Base
-from app.db import engine as app_engine  # engine уже настроен на DATABASE_URL
-
-# это стандартный импорт логгера
-config = context.config
-
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
-# наша metadata
-target_metadata = Base.metadata
+# ВАЖНО: Base объявляем ЗДЕСЬ, без импорта из app.db или app.models
+Base = declarative_base()
 
 
-def run_migrations_offline():
-    """Run migrations in 'offline' mode."""
-    # В offline можно вытащить URL из env при желании
-    url = config.get_main_option("sqlalchemy.url")
-    if not url:
-        import os
-        url = os.environ.get("DATABASE_URL")
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
+class League(Base):
+    __tablename__ = "league"
 
-    with context.begin_transaction():
-        context.run_migrations()
+    id = Column(Integer, primary_key=True)
+    shortcut = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    country = Column(String, nullable=False, default="Germany")
+    sport = Column(String, nullable=False, default="Football")
+
+    seasons = relationship("Season", back_populates="league")
 
 
-def run_migrations_online():
-    """Run migrations in 'online' mode."""
-    # вместо engine_from_config используем наш app_engine
-    connectable = app_engine
+class Season(Base):
+    __tablename__ = "season"
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-        )
+    id = Column(Integer, primary_key=True)
+    league_id = Column(Integer, ForeignKey("league.id"), nullable=False)
+    year = Column(Integer, nullable=False)
+    is_current = Column(Boolean, nullable=False, default=False)
 
-        with context.begin_transaction():
-            context.run_migrations()
+    league = relationship("League", back_populates="seasons")
+    matches = relationship("Match", back_populates="season")
 
 
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
+class Match(Base):
+    __tablename__ = "match"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    external_match_id = Column(Integer, nullable=False)
+    league_id = Column(Integer, ForeignKey("league.id"), nullable=False)
+    season_id = Column(Integer, ForeignKey("season.id"), nullable=False)
+    group_order_id = Column(Integer, nullable=False)
+    kickoff_utc = Column(DateTime(timezone=True), nullable=False)
+    status = Column(String, nullable=False)
+    team1_name = Column(String, nullable=False)
+    team2_name = Column(String, nullable=False)
+    score_team1 = Column(Integer)
+    score_team2 = Column(Integer)
+    raw_payload = Column(JSON)
+
+    season = relationship("Season", back_populates="matches")

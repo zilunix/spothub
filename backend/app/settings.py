@@ -1,58 +1,51 @@
-# backend/app/settings.py
+# app/settings.py
 from __future__ import annotations
 
-from typing import List, Any
-
-try:
-    # Pydantic v2
-    from pydantic_settings import BaseSettings
-    from pydantic import AnyHttpUrl, field_validator
-    _V2 = True
-except Exception:
-    # Pydantic v1
-    from pydantic import BaseSettings, AnyHttpUrl, validator
-    _V2 = False
+import os
+from pydantic import BaseModel
 
 
-class Settings(BaseSettings):
-    # Важно: имена полей без "sports_" — чтобы env_prefix="SPORTS_" дал ровно
-    # SPORTS_API_BASE_URL, SPORTS_DEFAULT_LEAGUES и т.д.
-    api_base_url: AnyHttpUrl = "https://www.openligadb.de/api"
-    default_leagues: List[str] = ["bl1"]
-    default_season: int = 2024
-    board_days_ahead: int = 3
-    board_days_back: int = 3
+class Settings(BaseModel):
+    """
+    Базовые настройки приложения.
 
-    # Новое поле: строка подключения к БД.
-    # По умолчанию — наш Postgres в кластере.
-    # Но в Kubernetes оно будет переопределяться переменной окружения DATABASE_URL.
-    database_url: str = "postgresql://sporthub:sporthub-pass@sporthub-postgres:5432/sporthub"
+    Всё читаем из переменных окружения с разумными дефолтами.
+    Никаких pydantic_settings и JSON-значений для complex-типов.
+    """
 
-    if _V2:
-        @field_validator("default_leagues", mode="before")
-        @classmethod
-        def _parse_leagues(cls, v: Any) -> Any:
-            if isinstance(v, str):
-                return [x.strip() for x in v.split(",") if x.strip()]
-            return v
-    else:
-        @validator("default_leagues", pre=True)
-        def _parse_leagues(cls, v: Any) -> Any:
-            if isinstance(v, str):
-                return [x.strip() for x in v.split(",") if x.strip()]
-            return v
+    # Базовый URL внешнего спортивного API (OpenLigaDB)
+    # Основная переменная: SPORTS_API_BASE_URL
+    api_base_url: str = os.getenv(
+        "SPORTS_API_BASE_URL",
+        "https://api.openligadb.de",
+    )
 
-    class Config:
-        # Все спортивные настройки берём из переменных окружения с префиксом SPORTS_
-        # (SPORTS_API_BASE_URL, SPORTS_DEFAULT_LEAGUES и т.д.)
-        env_prefix = "SPORTS_"
-        case_sensitive = False
+    # Список лиг по умолчанию (строкой, через запятую).
+    # Приоритет:
+    #   1) SPORTS_DEFAULT_LEAGUES
+    #   2) DEFAULT_LEAGUES
+    #   3) "bl1" по умолчанию
+    default_leagues: str = (
+        os.getenv("SPORTS_DEFAULT_LEAGUES")
+        or os.getenv("DEFAULT_LEAGUES", "bl1")
+    )
 
-        # А вот для database_url явно указываем, что её нужно брать из переменной
-        # окружения с ИМЕНЕМ "DATABASE_URL" (без префикса).
-        fields = {
-            "database_url": {"env": "DATABASE_URL"},
-        }
+    # Сезон по умолчанию
+    default_season: int = int(
+        os.getenv("SPORTS_DEFAULT_SEASON")
+        or os.getenv("DEFAULT_SEASON", "2024")
+    )
+
+    # Диапазон дней для /board
+    board_days_back: int = int(os.getenv("BOARD_DAYS_BACK", "3"))
+    board_days_ahead: int = int(os.getenv("BOARD_DAYS_AHEAD", "3"))
+
+    # Строка подключения к БД (используется в app.db, если нужно)
+    database_url: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://sporthub:sporthub-pass@sporthub-postgres:5432/sporthub",
+    )
 
 
+# Глобальный singleton настроек — ЭТО то, что импортирует app.main
 settings = Settings()
