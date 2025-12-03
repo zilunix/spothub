@@ -1,13 +1,12 @@
-# app/main.py
+# backend/app/main.py
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .settings import settings
-from .openligadb_client import OpenLigaDBClient
-from app.clients.openligadb_client import OpenLigaDBClient
+
 from app.settings import settings
-from .sports_api import (
+from app.clients.openligadb_client import OpenLigaDBClient
+from app.sports_api import (
     router as sports_router,
     get_client,
     get_leagues as get_leagues_handler,
@@ -43,7 +42,6 @@ async def root() -> dict:
 # Основные маршруты с префиксом /api (см. sports_api.py)
 app.include_router(sports_router)
 
-
 # ==== Legacy-роуты для текущего фронтенда (/leagues, /matches) ====
 
 @app.get("/leagues", tags=["sports-legacy"])
@@ -71,15 +69,13 @@ async def legacy_matches(
         date_str=date_str,
         client=client,
     )
-@app.get("/debug/openligadb/ping")
-async def debug_openligadb_ping():
-    client = OpenLigaDBClient()
-    data = await client.get_available_groups("bl1", 2024)
-    return {"ok": True, "groups_count": len(data)}
 
 
 @app.get("/debug/openligadb/ping", tags=["debug"])
 async def debug_openligadb_ping():
+    """
+    Проверка доступности OpenLigaDB из backend.
+    """
     client = OpenLigaDBClient()
     league = settings.default_leagues[0] if settings.default_leagues else "bl1"
     groups = await client.get_available_groups(league, settings.default_season)
