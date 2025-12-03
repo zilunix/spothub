@@ -1,66 +1,61 @@
-"""
-Простейший слой для работы с внешним спортивным API.
+# app/sports_api.py
+from __future__ import annotations
 
-В текущем MVP он возвращает статические данные.
-Позже сюда можно добавить реальные запросы к бесплатным спортивным API через httpx.
-"""
-from datetime import date
-from typing import Any, Dict, List
+import datetime as dt
+from typing import Any, Dict
 
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-# Заглушечные данные
-LEAGUES = [
-    {"id": "nhl", "name": "NHL"},
-    {"id": "apl", "name": "English Premier League"},
-]
+from . import config as cfg
+from .openligadb_client import Match, OpenLigaDBClient
 
-TEAMS = {
-    "nhl": [
-        {"id": "nyr", "name": "New York Rangers"},
-        {"id": "pit", "name": "Pittsburgh Penguins"},
-    ],
-    "apl": [
-        {"id": "ars", "name": "Arsenal"},
-        {"id": "liv", "name": "Liverpool"},
-    ],
-}
-
-MATCHES = {
-    # ключ: (league, date_iso)
-    ("nhl", "2025-12-01"): [
-        {
-            "id": "nhl-2025-12-01-1",
-            "home_team": "New York Rangers",
-            "away_team": "Pittsburgh Penguins",
-            "start_time": "19:00",
-            "status": "scheduled",
-            "score_home": None,
-            "score_away": None,
-        }
-    ],
-    ("apl", "2025-12-01"): [
-        {
-            "id": "apl-2025-12-01-1",
-            "home_team": "Arsenal",
-            "away_team": "Liverpool",
-            "start_time": "20:00",
-            "status": "scheduled",
-            "score_home": None,
-            "score_away": None,
-        }
-    ],
-}
+router = APIRouter(prefix="/api", tags=["sports"])
 
 
-async def list_leagues() -> List[Dict[str, Any]]:
-    # В будущем здесь может быть настоящий запрос к внешнему API
-    return LEAGUES
+async def get_client() -> OpenLigaDBClient:
+    """Dependency для DI клиента OpenLigaDB."""
+    return OpenLigaDBClient()
 
 
-async def list_teams(league: str) -> List[Dict[str, Any]]:
-    return TEAMS.get(league, [])
+@router.get("/leagues")
+async def get_leagues(
+    client: OpenLigaDBClient = Depends(get_client),
+) -> Dict[str, Any]:
+    """
+    Список лиг, которые мы хотим показывать на фронте.
+
+    Шорткаты берём из config.DEFAULT_LEAGUES (например, 'bl1,bl2').
+    """
+    shortcuts = cfg.get_default_leagues_list()
+    if not shortcuts:
+        raise HTTPException(status_code=500, detail="DEFAULT_LEAGUES is not configured")
+
+    leagues = await client.get_leagues(shortcuts)
+    return {"items": leagues}
 
 
-async def list_matches(league: str, on_date: date) -> List[Dict[str, Any]]:
-    key = (league, on_date.isoformat())
-    return MATCHES.get(key, [])
+@router.get("/matches")
+async def get_matches(
+    league: str,
+    date_str: str = Query(..., description="Дата в формате YYYY-MM-DD"),
+    client: OpenLigaDBClient = Depends(get_client),
+) -> Dict[str, Any]:
+    """
+    Матчи выбранной лиги на указанную дату.
+
+    Возвращаем структуру {'items': [...]} — как ждёт фронтенд.
+    """
+    # валидируем дату
+    try:
+        date = dt.date.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date_str must be in format YYYY-MM-DD")
+
+    matches = await client.get_matches_for_date(
+        league=league,
+        date=date,
+        season=cfg.DEFAULT_SEASON,
+    )
+
+    # фронту удобнее dict, чем Pydantic-модели
+    return {"items": [m.model_dump() for m in matches]}
