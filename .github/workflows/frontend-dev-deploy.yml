@@ -1,16 +1,16 @@
-name: Deploy Frontend to Dev
-run-name: "Deploy Frontend to Dev Ц ${{ github.event.inputs.title || github.sha }}"
+name: Build & Deploy Frontend to Dev
+run-name: "Build & Deploy Frontend to Dev Ц ${{ github.event.inputs.title || github.sha }}"
 
 on:
   workflow_dispatch:
     inputs:
       title:
-        description: "Ќазвание запуска (например, текст коммита)"
+        description: "Commit Text"
         required: false
         default: ""
 
 jobs:
-  deploy-dev:
+  build-and-deploy-dev:
     runs-on: [self-hosted, spothub-1]
 
     env:
@@ -20,6 +20,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Docker login to Docker Hub
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
       - name: Compute image tag
         id: vars
         run: |
@@ -27,18 +31,9 @@ jobs:
           echo "Using SHA: ${SHA}"
           echo "tag=dev-${SHA}" >> "$GITHUB_OUTPUT"
 
-      # (опционально Ц проверить, что образ точно есть в Docker Hub)
-      - name: Check image exists
+      - name: Build frontend image
         run: |
           TAG="${{ steps.vars.outputs.tag }}"
           IMAGE="${IMAGE_REPO}:${TAG}"
-          echo "Checking image ${IMAGE}..."
-          docker pull "${IMAGE}"
-
-      - name: Deploy frontend to DEV namespace
-        run: |
-          TAG="${{ steps.vars.outputs.tag }}"
-          IMAGE="${IMAGE_REPO}:${TAG}"
-          echo "Deploying ${IMAGE} to sporthub-dev..."
-          kubectl -n sporthub-dev set image deployment/sporthub-frontend frontend="${IMAGE}"
-          kubectl -n sporthub-dev rollout status deployment/sporthub-frontend
+          echo "Building image ${IMAGE}..."
+          # если Dockerfile ф
