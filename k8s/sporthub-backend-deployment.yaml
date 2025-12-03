@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: sporthub-backend
-  namespace: sporthub
+  namespace: sporthub-dev
 spec:
   replicas: 2
   selector:
@@ -18,19 +18,12 @@ spec:
           image: YOUR_DOCKERHUB_USER/sporthub-backend:0.1
           ports:
             - containerPort: 8000
-          env:
-            - name: SPORTS_API_BASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: sporthub-config
-                  key: SPORTS_API_BASE_URL
-            - name: DEFAULT_LEAGUES
-              valueFrom:
-                configMapKeyRef:
-                  name: sporthub-config
-                  key: DEFAULT_LEAGUES
-            - name: SPORTS_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: sporthub-secrets
-                  key: SPORTS_API_KEY
+          envFrom:
+            - configMapRef:
+                name: sporthub-config
+          # Если всё же нужен секрет (например, для другого API) — раскомментируй:
+          # envFrom:
+          #   - configMapRef:
+          #       name: sporthub-config
+          #   - secretRef:
+          #       name: sporthub-secrets

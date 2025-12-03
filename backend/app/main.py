@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from .settings import settings
 from .openligadb_client import OpenLigaDBClient
 from .sports_api import (
     router as sports_router,
@@ -68,4 +68,10 @@ async def legacy_matches(
         league=league,
         date_str=date_str,
         client=client,
+    )
+@app.on_event("startup")
+async def _startup():
+    print(
+        f"[settings] OpenLigaDB base={settings.api_base_url} "
+        f"leagues={settings.default_leagues} season={settings.default_season}"
     )
