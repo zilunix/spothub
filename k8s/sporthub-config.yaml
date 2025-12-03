@@ -5,7 +5,7 @@ metadata:
   namespace: sporthub-dev
 data:
   SPORTS_API_BASE_URL: "https://www.openligadb.de/api"
-  DEFAULT_LEAGUES: "bl1"
+  SPORTS_DEFAULT_LEAGUES: "bl1"
   SPORTS_DEFAULT_SEASON: "2024"
   SPORTS_BOARD_DAYS_AHEAD: "3"
   SPORTS_BOARD_DAYS_BACK: "3"

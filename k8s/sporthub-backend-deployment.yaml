@@ -15,15 +15,10 @@ spec:
     spec:
       containers:
         - name: backend
-          image: YOUR_DOCKERHUB_USER/sporthub-backend:0.1
+          image: zilov14/full-mvp-backend:dev-latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           envFrom:
             - configMapRef:
                 name: sporthub-config
-          # Если всё же нужен секрет (например, для другого API) — раскомментируй:
-          # envFrom:
-          #   - configMapRef:
-          #       name: sporthub-config
-          #   - secretRef:
-          #       name: sporthub-secrets
