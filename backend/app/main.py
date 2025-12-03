@@ -1,6 +1,6 @@
 # app/main.py
 from __future__ import annotations
-
+from app.routers.debug_openligadb import router as debug_openligadb_router
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .settings import settings
