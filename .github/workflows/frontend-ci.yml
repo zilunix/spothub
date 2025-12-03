@@ -30,4 +30,4 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:${{ github.sha }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:latest
+            
