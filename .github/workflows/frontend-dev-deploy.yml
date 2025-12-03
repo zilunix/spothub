@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Tag образа (по умолчанию dev-latest)'
-        required: false
-        default: 'dev-latest'
+        description: 'Commit SHA to deploy to dev (will use dev-<sha>)'
+        required: true
+        default: ''
 
 jobs:
   deploy-dev:
     runs-on: [self-hosted, spothub-1]
 
     env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      
       IMAGE_TAG: ${{ github.event.inputs.image_tag }}
 
     steps:
@@ -22,8 +22,12 @@ jobs:
 
       - name: Deploy frontend to DEV namespace
         run: |
-          TAG="${IMAGE_TAG:-dev-latest}"
-          IMAGE="${DOCKERHUB_USERNAME}/full-mvp-frontend:${TAG}"
-          echo "Deploying image to DEV: $IMAGE"
-          kubectl set image deployment/sporthub-frontend frontend=$IMAGE -n sporthub-dev
-          kubectl rollout status deployment/sporthub-frontend -n sporthub-dev
+          TAG="${IMAGE_TAG}"
+          if ! echo "$TAG" | grep -Eq '^[0-9a-f]{40}$'; then
+          echo "ERROR: image_tag must be full 40-char commit SHA, got: '$TAG'"
+          exit 1
+          fi
+          IMAGE="zilov14/full-mvp-frontend:dev-${TAG}"
+          echo "Deploying ${IMAGE} to sporthub-dev..."
+          kubectl -n sporthub-dev set image deployment/sporthub-frontend frontend="${IMAGE}"
+          kubectl -n sporthub-dev rollout status deployment/sporthub-frontend
