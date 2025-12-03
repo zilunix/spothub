@@ -1,11 +1,12 @@
 # app/main.py
 from __future__ import annotations
-from app.routers.debug_openligadb import router as debug_openligadb_router
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .settings import settings
 from .openligadb_client import OpenLigaDBClient
 from app.clients.openligadb_client import OpenLigaDBClient
+from app.settings import settings
 from .sports_api import (
     router as sports_router,
     get_client,
@@ -75,3 +76,16 @@ async def debug_openligadb_ping():
     client = OpenLigaDBClient()
     data = await client.get_available_groups("bl1", 2024)
     return {"ok": True, "groups_count": len(data)}
+
+
+@app.get("/debug/openligadb/ping", tags=["debug"])
+async def debug_openligadb_ping():
+    client = OpenLigaDBClient()
+    league = settings.default_leagues[0] if settings.default_leagues else "bl1"
+    groups = await client.get_available_groups(league, settings.default_season)
+    return {
+        "ok": True,
+        "league": league,
+        "season": settings.default_season,
+        "groups_count": len(groups),
+    }
