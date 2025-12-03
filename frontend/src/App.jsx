@@ -1,8 +1,11 @@
 // src/App.jsx
-import React from "react";
+import React, { useState } from "react";
 import { BoardPage } from "./pages/BoardPage";
+import { ArchivePage } from "./pages/ArchivePage";
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState("board"); // "board" | "archive"
+
   return (
     <div className="app">
       <header className="app-header">
@@ -10,10 +13,27 @@ export default function App() {
         <p className="subtitle">
           MVP-панель матчей (Kubernetes домашняя лаба)
         </p>
+
+        <nav className="tabs">
+          <button
+            type="button"
+            className={activeTab === "board" ? "tab active" : "tab"}
+            onClick={() => setActiveTab("board")}
+          >
+            Доска
+          </button>
+          <button
+            type="button"
+            className={activeTab === "archive" ? "tab active" : "tab"}
+            onClick={() => setActiveTab("archive")}
+          >
+            Архив
+          </button>
+        </nav>
       </header>
 
       <main className="content">
-        <BoardPage />
+        {activeTab === "board" ? <BoardPage /> : <ArchivePage />}
       </main>
 
       <footer className="footer">
@@ -22,4 +42,3 @@ export default function App() {
     </div>
   );
 }
-
