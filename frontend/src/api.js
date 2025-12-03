@@ -1,24 +1,33 @@
+// src/api.js
+
 let API_BASE =
   import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "/api";
 
+/**
+ * Установить базовый URL API (если нужно переопределить вручную).
+ */
 export function setApiBase(base) {
   if (typeof base === "string" && base.trim()) {
     API_BASE = base.replace(/\/$/, "");
   }
 }
 
-async function request(path, params = {}) {
+/**
+ * Базовый запрос к API.
+ * path — строка вида "/board" или "/archive/leagues"
+ * params — объект с query-параметрами
+ */
+export async function apiRequest(path, params = {}) {
   const url = new URL(API_BASE + path, window.location.origin);
+
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
-      url.searchParams.set(key, value);
+      url.searchParams.set(String(key), String(value));
     }
   });
 
-  const resp = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-    },
+  const resp = await fetch(url.toString(), {
+    headers: { Accept: "application/json" },
   });
 
   if (!resp.ok) {
@@ -29,38 +38,54 @@ async function request(path, params = {}) {
   return resp.json();
 }
 
-export async function fetchLeagues() {
-  const data = await request("/leagues");
-  console.log("fetchLeagues raw:", data, "isArray:", Array.isArray(data));
+/* ==== Старые функции (если использовались) ==== */
 
-  // 1) backend вернул сразу массив
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  // 2) backend вернул объект вида { leagues: [...] }
-  if (data && Array.isArray(data.leagues)) {
-    return data.leagues;
-  }
-
-  // 3) заглушка на случай любого другого ответа, чтобы .map не падал
-  return [];
+export function fetchLeagues() {
+  return apiRequest("/leagues");
 }
 
-export async function fetchMatches(league, dateStr) {
-  const data = await request("/matches", { league, date_str: dateStr });
-  console.log("fetchMatches raw:", data, "isArray:", Array.isArray(data));
+export function fetchMatches(league, dateStr) {
+  return apiRequest("/matches", { league, date_str: dateStr });
+}
 
-  // 1) backend вернул сразу массив матчей
-  if (Array.isArray(data)) {
-    return data;
+/* ==== Новый API для доски (board) ==== */
+
+/**
+ * Получить объект { live, upcoming, recent }
+ * leagues: массив строк (["bl1", "bl2"]), опционально
+ * season: номер сезона, опционально
+ */
+export function fetchBoard({ leagues, season } = {}) {
+  const params = {};
+  if (Array.isArray(leagues) && leagues.length > 0) {
+    params.leagues = leagues.join(",");
   }
-
-  // 2) backend вернул объект вида { matches: [...] }
-  if (data && Array.isArray(data.matches)) {
-    return data.matches;
+  if (season) {
+    params.season = season;
   }
+  return apiRequest("/board", params);
+}
 
-  // 3) заглушка
-  return [];
+/* ==== API для архива ==== */
+
+export function fetchArchiveLeagues() {
+  return apiRequest("/archive/leagues");
+}
+
+export function fetchArchiveSeasons(league) {
+  return apiRequest(`/archive/${encodeURIComponent(league)}/seasons`);
+}
+
+export function fetchArchiveGroups(league, season) {
+  return apiRequest(
+    `/archive/${encodeURIComponent(league)}/${encodeURIComponent(season)}/groups`
+  );
+}
+
+export function fetchArchiveMatches(league, season, groupOrderId) {
+  return apiRequest(
+    `/archive/${encodeURIComponent(league)}/${encodeURIComponent(
+      season
+    )}/${encodeURIComponent(groupOrderId)}`
+  );
 }
