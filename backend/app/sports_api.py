@@ -187,6 +187,7 @@ async def get_board(
         upcoming=upcoming,
     )
 
+
 # ================== /archive ==================
 
 
@@ -218,3 +219,61 @@ async def get_archive_leagues(
             detail="Ошибка при обращении к внешнему API OpenLigaDB (archive/leagues)",
         )
 
+
+@router.get(
+    "/archive/{league}/seasons",
+    summary="Доступные сезоны для выбранной лиги (архив)",
+)
+async def get_archive_seasons(
+    league: str,
+    client: OpenLigaDBClient = Depends(get_client),
+) -> List[int]:
+    """
+    Вернуть список сезонов для архивной лиги.
+
+    Берём все записи по данной лиге из OpenLigaDB и возвращаем уникальные сезоны,
+    отсортированные по убыванию (последние сезоны первыми).
+    """
+    # приводим shortcut к нижнему регистру для унификации
+    league = league.lower()
+
+    try:
+        # используем уже существующий клиент — он вернёт все записи по этой лиге
+        leagues = await client.get_leagues([league])
+    except Exception as exc:
+        logger.exception(
+            "Не удалось получить сезоны для архивной лиги %s: %s",
+            league,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (archive/seasons)",
+        )
+
+    if not leagues:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Лига '{league}' не найдена или не имеет сезонов",
+        )
+
+    seasons_set = set()
+    for item in leagues:
+        s = item.get("season")
+        if s is None:
+            continue
+        try:
+            seasons_set.add(int(s))
+        except (TypeError, ValueError):
+            # если по каким-то причинам не число — пропускаем
+            continue
+
+    if not seasons_set:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Для лиги '{league}' не найдено ни одного сезона",
+        )
+
+    # сортируем по убыванию (новые сезоны первыми)
+    seasons_sorted = sorted(seasons_set, reverse=True)
+    return seasons_sorted
