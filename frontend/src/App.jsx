@@ -1,65 +1,8 @@
-import React, { useEffect, useState } from "react";
-import { fetchLeagues, fetchMatches } from "./api.js";
-
-function formatDateInput(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function todayIso() {
-  return formatDateInput(new Date());
-}
+// src/App.jsx
+import React from "react";
+import { BoardPage } from "./pages/BoardPage";
 
 export default function App() {
-  const [leagues, setLeagues] = useState([]);
-  const [selectedLeague, setSelectedLeague] = useState("");
-  const [dateStr, setDateStr] = useState(todayIso());
-  const [matches, setMatches] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  // Загрузка лиг при старте
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await fetchLeagues();
-        console.log("Leagues loaded:", data, "isArray:", Array.isArray(data));
-        setLeagues(data);
-
-        if (Array.isArray(data) && data.length > 0) {
-          setSelectedLeague(data[0].id ?? data[0].code ?? "");
-        } else {
-          setSelectedLeague("");
-        }
-      } catch (e) {
-        console.error("Failed to load leagues", e);
-        setError(`Ошибка загрузки лиг: ${e.message}`);
-        setLeagues([]);
-        setSelectedLeague("");
-      }
-    })();
-  }, []);
-
-  // Загрузка матчей при смене лиги/даты
-  useEffect(() => {
-    if (!selectedLeague) return;
-
-    setLoading(true);
-    setError("");
-    (async () => {
-      try {
-        const data = await fetchMatches(selectedLeague, dateStr);
-        console.log("Matches loaded:", data, "isArray:", Array.isArray(data));
-        setMatches(data);
-      } catch (e) {
-        console.error("Failed to load matches", e);
-        setError(`Ошибка загрузки матчей: ${e.message}`);
-        setMatches([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [selectedLeague, dateStr]);
-
   return (
     <div className="app">
       <header className="app-header">
@@ -69,85 +12,9 @@ export default function App() {
         </p>
       </header>
 
-      <section className="controls">
-        <div className="control">
-          <label>Лига</label>
-          <select
-            value={selectedLeague}
-            onChange={(e) => setSelectedLeague(e.target.value)}
-          >
-            {!Array.isArray(leagues) || leagues.length === 0 ? (
-              <option value="">Нет доступных лиг</option>
-            ) : (
-              leagues.map((l) => (
-                <option key={l.id ?? l.code} value={l.id ?? l.code ?? ""}>
-                  {l.name ?? l.code ?? "Без названия"}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-
-        <div className="control">
-          <label>Дата</label>
-          <input
-            type="date"
-            value={dateStr}
-            onChange={(e) => setDateStr(e.target.value)}
-          />
-        </div>
-      </section>
-
-      <section className="content">
-        {loading && <div className="info">Загружаем матчи...</div>}
-        {error && <div className="error">{error}</div>}
-
-        {/* Таблица ВСЕГДА рендерится, просто может быть пустой */}
-        <table className="matches-table">
-          <thead>
-            <tr>
-              <th>Лига</th>
-              <th>Матч</th>
-              <th>Время</th>
-              <th>Статус</th>
-              <th>Счёт</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(Array.isArray(matches) ? matches : []).map((m) => (
-              <tr
-                key={
-                  m.id ?? `${m.home_team}-${m.away_team}-${m.start_time}`
-                }
-              >
-                <td>
-                  {selectedLeague
-                    ? String(selectedLeague).toUpperCase()
-                    : ""}
-                </td>
-                <td>
-                  {m.home_team} vs {m.away_team}
-                </td>
-                <td>{m.start_time}</td>
-                <td>{m.status}</td>
-                <td>
-                  {m.score_home == null || m.score_away == null
-                    ? "-"
-                    : `${m.score_home}:${m.score_away}`}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Сообщение о пустых данных — отдельно, не прячет таблицу */}
-        {!loading &&
-          !error &&
-          Array.isArray(matches) &&
-          matches.length === 0 && (
-            <div className="info">Нет матчей для выбранной лиги и даты.</div>
-          )}
-      </section>
+      <main className="content">
+        <BoardPage />
+      </main>
 
       <footer className="footer">
         <span>SportHub MVP · Kubernetes homelab</span>
@@ -155,3 +22,4 @@ export default function App() {
     </div>
   );
 }
+
