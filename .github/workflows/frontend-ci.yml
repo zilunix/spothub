@@ -29,5 +29,5 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:dev-${{ github.sha }}
             
