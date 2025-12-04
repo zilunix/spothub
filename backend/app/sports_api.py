@@ -355,3 +355,262 @@ async def get_archive_matches(
     summaries.sort(key=lambda x: x.kickoff_utc)
 
     return summaries
+
+# ================== /admin/sync-season ==================
+
+
+@router.post(
+    "/admin/sync-season",
+    summary="Принудительная синхронизация сезона в БД",
+)
+async def admin_sync_season(
+    league: str,
+    season: int,
+    db: Session = Depends(get_db),
+    client: OpenLigaDBClient = Depends(get_client),
+) -> dict:
+    """
+    Админ-эндпоинт: подтягивает все матчи указанной лиги и сезона
+    из OpenLigaDB и сохраняет/обновляет их в БД.
+
+    Пример:
+      POST /api/admin/sync-season?league=bl1&season=2024
+    """
+    league = league.lower()
+    now = dt.datetime.now(dt.timezone.utc)
+
+    try:
+        raw_matches = await client.get_season_raw(league, season)
+    except Exception as exc:
+        logger.exception(
+            "Не удалось получить матчи для sync-season (league=%s, season=%s): %s",
+            league,
+            season,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (admin/sync-season)",
+        )
+
+    if not raw_matches:
+        return {
+            "league": league,
+            "season": season,
+            "synced": 0,
+            "detail": "Матчей не найдено",
+        }
+
+    summaries: list[MatchSummary] = []
+    for rm in raw_matches:
+        ms = classify_match(rm, now)
+        summaries.append(ms)
+
+    # Сохраняем/обновляем в БД
+    bulk_upsert_matches_from_board(
+        db=db,
+        league_shortcut=league,
+        league_name=league,  # можно потом заменить на красивое имя
+        season_year=season,
+        matches=[m.model_dump() for m in summaries],
+    )
+
+    return {
+        "league": league,
+        "season": season,
+        "synced": len(summaries),
+    }
+# ================== /admin/sync-season ==================
+
+
+@router.post(
+    "/admin/sync-season",
+    summary="Принудительная синхронизация сезона в БД",
+)
+async def admin_sync_season(
+    league: str,
+    season: int,
+    db: Session = Depends(get_db),
+    client: OpenLigaDBClient = Depends(get_client),
+) -> dict:
+    """
+    Админ-эндпоинт: подтягивает все матчи указанной лиги и сезона
+    из OpenLigaDB и сохраняет/обновляет их в БД.
+
+    Пример:
+      POST /api/admin/sync-season?league=bl1&season=2024
+    """
+    league = league.lower()
+    now = dt.datetime.now(dt.timezone.utc)
+
+    try:
+        raw_matches = await client.get_season_raw(league, season)
+    except Exception as exc:
+        logger.exception(
+            "Не удалось получить матчи для sync-season (league=%s, season=%s): %s",
+            league,
+            season,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (admin/sync-season)",
+        )
+
+    if not raw_matches:
+        return {
+            "league": league,
+            "season": season,
+            "synced": 0,
+            "detail": "Матчей не найдено",
+        }
+
+    summaries: list[MatchSummary] = []
+    for rm in raw_matches:
+        ms = classify_match(rm, now)
+        summaries.append(ms)
+
+    # Сохраняем/обновляем в БД
+    bulk_upsert_matches_from_board(
+        db=db,
+        league_shortcut=league,
+        league_name=league,  # можно потом заменить на красивое имя
+        season_year=season,
+        matches=[m.model_dump() for m in summaries],
+    )
+
+    return {
+        "league": league,
+        "season": season,
+        "synced": len(summaries),
+    }
+# ================== /admin/sync-season ==================
+
+
+@router.post(
+    "/admin/sync-season",
+    summary="Принудительная синхронизация сезона в БД",
+)
+async def admin_sync_season(
+    league: str,
+    season: int,
+    db: Session = Depends(get_db),
+    client: OpenLigaDBClient = Depends(get_client),
+) -> dict:
+    """
+    Админ-эндпоинт: подтягивает все матчи указанной лиги и сезона
+    из OpenLigaDB и сохраняет/обновляет их в БД.
+
+    Пример:
+      POST /api/admin/sync-season?league=bl1&season=2024
+    """
+    league = league.lower()
+    now = dt.datetime.now(dt.timezone.utc)
+
+    try:
+        raw_matches = await client.get_season_raw(league, season)
+    except Exception as exc:
+        logger.exception(
+            "Не удалось получить матчи для sync-season (league=%s, season=%s): %s",
+            league,
+            season,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (admin/sync-season)",
+        )
+
+    if not raw_matches:
+        return {
+            "league": league,
+            "season": season,
+            "synced": 0,
+            "detail": "Матчей не найдено",
+        }
+
+    summaries: list[MatchSummary] = []
+    for rm in raw_matches:
+        ms = classify_match(rm, now)
+        summaries.append(ms)
+
+    # Сохраняем/обновляем в БД
+    bulk_upsert_matches_from_board(
+        db=db,
+        league_shortcut=league,
+        league_name=league,  # можно потом заменить на красивое имя
+        season_year=season,
+        matches=[m.model_dump() for m in summaries],
+    )
+
+    return {
+        "league": league,
+        "season": season,
+        "synced": len(summaries),
+    }
+# ================== /admin/sync-season ==================
+
+
+@router.post(
+    "/admin/sync-season",
+    summary="Принудительная синхронизация сезона в БД",
+)
+async def admin_sync_season(
+    league: str,
+    season: int,
+    db: Session = Depends(get_db),
+    client: OpenLigaDBClient = Depends(get_client),
+) -> dict:
+    """
+    Админ-эндпоинт: подтягивает все матчи указанной лиги и сезона
+    из OpenLigaDB и сохраняет/обновляет их в БД.
+
+    Пример:
+      POST /api/admin/sync-season?league=bl1&season=2024
+    """
+    league = league.lower()
+    now = dt.datetime.now(dt.timezone.utc)
+
+    try:
+        raw_matches = await client.get_season_raw(league, season)
+    except Exception as exc:
+        logger.exception(
+            "Не удалось получить матчи для sync-season (league=%s, season=%s): %s",
+            league,
+            season,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка при обращении к внешнему API OpenLigaDB (admin/sync-season)",
+        )
+
+    if not raw_matches:
+        return {
+            "league": league,
+            "season": season,
+            "synced": 0,
+            "detail": "Матчей не найдено",
+        }
+
+    summaries: list[MatchSummary] = []
+    for rm in raw_matches:
+        ms = classify_match(rm, now)
+        summaries.append(ms)
+
+    # Сохраняем/обновляем в БД
+    bulk_upsert_matches_from_board(
+        db=db,
+        league_shortcut=league,
+        league_name=league,  # можно потом заменить на красивое имя
+        season_year=season,
+        matches=[m.model_dump() for m in summaries],
+    )
+
+    return {
+        "league": league,
+        "season": season,
+        "synced": len(summaries),
+    }
+# ================== /admin/sync-season ==================
+
