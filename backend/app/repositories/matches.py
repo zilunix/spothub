@@ -1,6 +1,8 @@
 # app/repositories/matches.py
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Iterable
+from typing import Iterable, Mapping, Any
 
 from sqlalchemy.orm import Session
 
@@ -56,29 +58,68 @@ def get_or_create_season(
     return season
 
 
+def _extract_external_id(match_data: Mapping[str, Any]) -> int:
+    """
+    Пытаемся вытащить идентификатор матча из разных возможных ключей.
+    """
+    for key in ("id", "external_match_id", "match_id", "matchID"):
+        if key in match_data and match_data[key] is not None:
+            return int(match_data[key])
+    raise ValueError(f"Cannot determine external match id from data: {match_data!r}")
+
+
+def _extract_group_order_id(match_data: Mapping[str, Any]) -> int:
+    for key in ("group_order_id", "groupOrderID", "group_order"):
+        if key in match_data and match_data[key] is not None:
+            return int(match_data[key])
+    # если вообще нет — считаем 0
+    return 0
+
+
+def _extract_kickoff_utc(match_data: Mapping[str, Any]) -> datetime:
+    """
+    Ожидаем либо ISO-строку, либо datetime.
+    """
+    val = match_data.get("kickoff_utc") or match_data.get("kickoff")
+    if isinstance(val, datetime):
+        return val
+    if isinstance(val, str):
+        # убираем 'Z' и приводим к offset-aware datetime
+        return datetime.fromisoformat(val.replace("Z", "+00:00"))
+
+    raise ValueError(f"Cannot determine kickoff_utc from data: {match_data!r}")
+
+
+def _extract_team_name(match_data: Mapping[str, Any], key: str) -> str:
+    """
+    Поддержка как плоских полей, так и вложенных структур (team1.name).
+    """
+    if key in match_data and match_data[key]:
+        return str(match_data[key])
+
+    nested = match_data.get(key.replace("_name", ""))
+    if isinstance(nested, Mapping):
+        for k in ("teamName", "name", "shortName"):
+            if k in nested and nested[k]:
+                return str(nested[k])
+
+    return "Unknown"
+
+
 def upsert_match_from_payload(
     db: Session,
     league: League,
     season: Season,
-    match_data: dict,
+    match_data: Mapping[str, Any],
 ) -> Match:
     """
-    Ожидаем match_data в формате, который у тебя уже есть в board, например:
-    {
-        "id": 72222,
-        "league_shortcut": "bl1",
-        "league_season": 2024,
-        "group_order_id": 1,
-        "team1_name": "...",
-        "team2_name": "...",
-        "kickoff_utc": "2024-08-25T15:30:00Z",
-        "status": "FINISHED",
-        "score_team1": 0,
-        "score_team2": 2,
-        ...
-    }
+    Универсальный upsert матча в БД.
+
+    match_data может быть:
+    - dict, полученный из MatchSummary.model_dump(mode="json")
+    - или любой другой dict с ожидаемыми полями.
     """
-    external_id = match_data["id"]
+    external_id = _extract_external_id(match_data)
 
     match = (
         db.query(Match)
@@ -89,33 +130,41 @@ def upsert_match_from_payload(
         .first()
     )
 
-    kickoff_str = match_data["kickoff_utc"]
-    kickoff_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+    kickoff_dt = _extract_kickoff_utc(match_data)
+    group_order_id = _extract_group_order_id(match_data)
+
+    status = str(match_data.get("status", "UNKNOWN"))
+    team1_name = _extract_team_name(match_data, "team1_name")
+    team2_name = _extract_team_name(match_data, "team2_name")
+
+    score_team1 = match_data.get("score_team1")
+    score_team2 = match_data.get("score_team2")
 
     if not match:
         match = Match(
             external_match_id=external_id,
             league_id=league.id,
             season_id=season.id,
-            group_order_id=match_data["group_order_id"],
+            group_order_id=group_order_id,
             kickoff_utc=kickoff_dt,
-            status=match_data["status"],
-            team1_name=match_data["team1_name"],
-            team2_name=match_data["team2_name"],
-            score_team1=match_data.get("score_team1"),
-            score_team2=match_data.get("score_team2"),
-            raw_payload=match_data,
+            status=status,
+            team1_name=team1_name,
+            team2_name=team2_name,
+            score_team1=score_team1,
+            score_team2=score_team2,
+            # raw_payload должен быть JSON-сериализуемым — сюда будем передавать dict
+            raw_payload=dict(match_data),
         )
         db.add(match)
     else:
-        match.group_order_id = match_data["group_order_id"]
+        match.group_order_id = group_order_id
         match.kickoff_utc = kickoff_dt
-        match.status = match_data["status"]
-        match.team1_name = match_data["team1_name"]
-        match.team2_name = match_data["team2_name"]
-        match.score_team1 = match_data.get("score_team1")
-        match.score_team2 = match_data.get("score_team2")
-        match.raw_payload = match_data
+        match.status = status
+        match.team1_name = team1_name
+        match.team2_name = team2_name
+        match.score_team1 = score_team1
+        match.score_team2 = score_team2
+        match.raw_payload = dict(match_data)
 
     return match
 
@@ -125,11 +174,11 @@ def bulk_upsert_matches_from_board(
     league_shortcut: str,
     league_name: str,
     season_year: int,
-    matches: Iterable[dict],
+    matches: Iterable[Mapping[str, Any]],
 ) -> None:
     """
-    Универсальная точка входа: на вход список матчей из board —
-    на выходе всё в БД.
+    Универсальная точка входа: на вход список матчей (dict, совместимый
+    с MatchSummary.model_dump(mode='json')), на выходе — данные в БД.
     """
     league = get_or_create_league(
         db=db,
