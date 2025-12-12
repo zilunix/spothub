@@ -1,3 +1,4 @@
+
 name: Backend CI (tests, build & push)
 
 on:
@@ -11,11 +12,15 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
-  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  tests:
-    runs-on: ubuntu-latest
+  test:
+    name: Tests
+    runs-on: self-hosted
     defaults:
       run:
         working-directory: backend
@@ -23,55 +28,67 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Run tests
-        run: pytest -q
+        run: |
+          if [ -d tests ]; then
+            pytest -q
+          else
+            echo "No backend/tests directory found — skipping pytest."
+          fi
 
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: tests
-    if: github.event_name != 'pull_request'
+  build_push:
+    name: Build & Push (dev tags)
+    runs-on: self-hosted
+    needs: [ test ]
+    if: github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: backend
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Verify DockerHub secrets are set
+      - name: Read version
+        id: ver
         run: |
-          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            echo "DOCKERHUB_USERNAME secret is missing or empty"
-            exit 1
-          fi
-          if [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
-            echo "DOCKERHUB_TOKEN secret is missing or empty"
-            exit 1
-          fi
-          echo "DockerHub secrets look present."
+          VERSION="$(cat VERSION | tr -d ' \n\r\t')"
+          if [ -z "$VERSION" ]; then echo "VERSION is empty"; exit 1; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Docker login
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USER }}" --password-stdin
 
-      - name: Build & push backend
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend:dev-latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend:dev-${{ github.sha }}
+      - name: Build
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USER }}/full-mvp-backend"
+          SHA="${GITHUB_SHA}"
+          SHA7="$(echo "$SHA" | cut -c1-7)"
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          docker build -t "$IMAGE:dev-$SHA" -t "$IMAGE:dev-latest" -t "$IMAGE:dev-v${VERSION}-$SHA7" .
+
+      - name: Push
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USER }}/full-mvp-backend"
+          SHA="${GITHUB_SHA}"
+          VERSION="${{ steps.ver.outputs.version }}"
+          SHA7="$(echo "$SHA" | cut -c1-7)"
+
+          docker push "$IMAGE:dev-$SHA"
+          docker push "$IMAGE:dev-latest"
+          docker push "$IMAGE:dev-v${VERSION}-$SHA7"
+

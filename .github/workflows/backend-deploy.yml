@@ -1,0 +1,128 @@
+
+name: Backend Deploy (dev/prod)
+
+on:
+  workflow_run:
+    workflows: [ "Backend CI (tests, build & push)" ]
+    types: [ completed ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "dev or prod"
+        required: true
+        default: "dev"
+      sha:
+        description: "Commit SHA to deploy (optional)"
+        required: false
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    # Авто-деплой только после успешного CI и только для push-событий (не PR)
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push') ||
+      (github.event_name == 'workflow_dispatch')
+
+    steps:
+      - name: Resolve SHA and commit message
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            MSG="${{ github.event.workflow_run.head_commit.message }}"
+          else
+            SHA="${{ inputs.sha }}"
+            MSG=""
+          fi
+
+          if [ -z "$SHA" ]; then
+            SHA="${{ github.sha }}"
+          fi
+
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+          echo "msg<<__EOF__" >> "$GITHUB_OUTPUT"
+          echo "$MSG" >> "$GITHUB_OUTPUT"
+          echo "__EOF__" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout code at SHA (to read VERSION)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.sha }}
+
+      - name: Read version
+        id: ver
+        run: |
+          VERSION="$(cat backend/VERSION | tr -d ' \n\r\t')"
+          if [ -z "$VERSION" ]; then echo "backend/VERSION is empty"; exit 1; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Decide target environment
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment }}"
+          else
+            MSG="${{ steps.meta.outputs.msg }}"
+            LMSG="$(echo "$MSG" | tr '[:upper:]' '[:lower:]')"
+            ENV="none"
+
+            # приоритет prod, если вдруг оба маркера
+            echo "$LMSG" | grep -q "deploy:dev"  && ENV="dev"
+            echo "$LMSG" | grep -q "deploy:prod" && ENV="prod"
+          fi
+
+          echo "env=$ENV" >> "$GITHUB_OUTPUT"
+          echo "Chosen env: $ENV"
+          echo "SHA: ${{ steps.meta.outputs.sha }}"
+          echo "VERSION: ${{ steps.ver.outputs.version }}"
+
+      - name: Stop if no deploy requested
+        if: steps.target.outputs.env == 'none'
+        run: |
+          echo "No deploy marker found (deploy:dev / deploy:prod). Skipping deploy."
+          exit 0
+
+      - name: Docker login
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USER }}" --password-stdin
+
+      - name: Deploy to DEV
+        if: steps.target.outputs.env == 'dev'
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USER }}/full-mvp-backend"
+          SHA="${{ steps.meta.outputs.sha }}"
+
+          echo "Deploying DEV image: $IMAGE:dev-$SHA"
+          kubectl -n sporthub-dev set image deployment/sporthub-backend backend="$IMAGE:dev-$SHA"
+          kubectl -n sporthub-dev rollout status deployment/sporthub-backend --timeout=180s
+
+      - name: Promote and Deploy to PROD
+        if: steps.target.outputs.env == 'prod'
+        environment: sporthub-prod
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USER }}/full-mvp-backend"
+          SHA="${{ steps.meta.outputs.sha }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          echo "Promoting $IMAGE:dev-$SHA -> $IMAGE:prod-v$VERSION"
+          docker pull "$IMAGE:dev-$SHA"
+
+          docker tag "$IMAGE:dev-$SHA" "$IMAGE:prod-$SHA"
+          docker tag "$IMAGE:dev-$SHA" "$IMAGE:prod-v$VERSION"
+          docker tag "$IMAGE:dev-$SHA" "$IMAGE:prod-latest"
+
+          docker push "$IMAGE:prod-$SHA"
+          docker push "$IMAGE:prod-v$VERSION"
+          docker push "$IMAGE:prod-latest"
+
+          echo "Deploying PROD image: $IMAGE:prod-v$VERSION"
+          kubectl -n sporthub-prod set image deployment/sporthub-backend backend="$IMAGE:prod-v$VERSION"
+          kubectl -n sporthub-prod rollout status deployment/sporthub-backend --timeout=180s
+
