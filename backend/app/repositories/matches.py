@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterable, Mapping, Any
+from typing import Iterable, Mapping, Any, Optional
 
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,9 @@ def get_or_create_league(
     country: str = "Germany",
     sport: str = "Football",
 ) -> League:
+    """
+    Находит лигу по shortcut или создаёт новую.
+    """
     league = db.query(League).filter_by(shortcut=shortcut).first()
     if league:
         return league
@@ -37,6 +40,9 @@ def get_or_create_season(
     year: int,
     is_current: bool = True,
 ) -> Season:
+    """
+    Находит сезон по (league, year) или создаёт новый.
+    """
     season = (
         db.query(Season)
         .filter(
@@ -61,47 +67,112 @@ def get_or_create_season(
 def _extract_external_id(match_data: Mapping[str, Any]) -> int:
     """
     Пытаемся вытащить идентификатор матча из разных возможных ключей.
+
+    Поддерживаем:
+    - id
+    - external_match_id
+    - match_id
+    - matchID
     """
     for key in ("id", "external_match_id", "match_id", "matchID"):
-        if key in match_data and match_data[key] is not None:
+        if key in match_data and match_data[key] not in (None, ""):
             return int(match_data[key])
     raise ValueError(f"Cannot determine external match id from data: {match_data!r}")
 
 
 def _extract_group_order_id(match_data: Mapping[str, Any]) -> int:
+    """
+    Порядок группы/тура. Если нет — считаем 0.
+    """
     for key in ("group_order_id", "groupOrderID", "group_order"):
-        if key in match_data and match_data[key] is not None:
+        if key in match_data and match_data[key] not in (None, ""):
             return int(match_data[key])
-    # если вообще нет — считаем 0
     return 0
 
 
-def _extract_kickoff_utc(match_data: Mapping[str, Any]) -> datetime:
+def _parse_datetime_maybe(value: Any) -> Optional[datetime]:
     """
-    Ожидаем либо ISO-строку, либо datetime.
-    """
-    val = match_data.get("kickoff_utc") or match_data.get("kickoff")
-    if isinstance(val, datetime):
-        return val
-    if isinstance(val, str):
-        # убираем 'Z' и приводим к offset-aware datetime
-        return datetime.fromisoformat(val.replace("Z", "+00:00"))
+    Универсальный парсер datetime:
 
-    raise ValueError(f"Cannot determine kickoff_utc from data: {match_data!r}")
+    - если уже datetime — возвращаем как есть;
+    - если строка:
+      - убираем 'Z' в конце и подставляем +00:00;
+      - пробуем datetime.fromisoformat в нескольких вариантах;
+    - иначе None.
+    """
+    if isinstance(value, datetime):
+        return value
+
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return None
+
+        # Z-суффикс → UTC
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+
+        # Пробуем напрямую
+        try:
+            return datetime.fromisoformat(s)
+        except ValueError:
+            pass
+
+        # Пробуем заменить пробел на 'T'
+        try:
+            return datetime.fromisoformat(s.replace(" ", "T"))
+        except ValueError:
+            return None
+
+    return None
+
+
+def _extract_kickoff_utc(match_data: Mapping[str, Any]) -> Optional[datetime]:
+    """
+    Достаём дату/время начала матча в UTC (или с таймзоной).
+
+    Поддерживаем как наши поля, так и сырые из OpenLigaDB:
+    - kickoff_utc / kickoff
+    - matchDateTimeUTC / matchDateTime / MatchDateTimeUTC / MatchDateTime
+    """
+    keys_to_try = (
+        "kickoff_utc",
+        "kickoff",
+        "matchDateTimeUTC",
+        "matchDateTime",
+        "MatchDateTimeUTC",
+        "MatchDateTime",
+    )
+
+    for key in keys_to_try:
+        if key in match_data and match_data[key] not in (None, ""):
+            dt = _parse_datetime_maybe(match_data[key])
+            if dt is not None:
+                return dt
+
+    # Если не удалось — возвращаем None, вызывающая функция решит, что делать
+    return None
 
 
 def _extract_team_name(match_data: Mapping[str, Any], key: str) -> str:
     """
-    Поддержка как плоских полей, так и вложенных структур (team1.name).
+    Поддержка как плоских полей, так и вложенных структур (например, team1.name).
+
+    Ожидаем:
+    - team1_name / team2_name
+    - или вложенные объекты team1/team2 с полями teamName/name/shortName.
     """
+    # Плоское поле
     if key in match_data and match_data[key]:
         return str(match_data[key])
 
-    nested = match_data.get(key.replace("_name", ""))
+    # Вложенный объект: team1_name -> team1, team2_name -> team2
+    nested_key = key.replace("_name", "")
+    nested = match_data.get(nested_key)
     if isinstance(nested, Mapping):
-        for k in ("teamName", "name", "shortName"):
-            if k in nested and nested[k]:
-                return str(nested[k])
+        for candidate in ("teamName", "name", "shortName"):
+            if candidate in nested and nested[candidate]:
+                return str(nested[candidate])
 
     return "Unknown"
 
@@ -111,17 +182,17 @@ def upsert_match_from_payload(
     league: League,
     season: Season,
     match_data: Mapping[str, Any],
-) -> Match:
+) -> Optional[Match]:
     """
     Универсальный upsert матча в БД.
 
     match_data может быть:
-    - dict, полученный из MatchSummary.model_dump(mode="json")
+    - dict, полученный из MatchSummary.model_dump(mode="json");
     - или любой другой dict с ожидаемыми полями.
     """
     external_id = _extract_external_id(match_data)
 
-    match = (
+    match: Optional[Match] = (
         db.query(Match)
         .filter(
             Match.external_match_id == external_id,
@@ -131,6 +202,11 @@ def upsert_match_from_payload(
     )
 
     kickoff_dt = _extract_kickoff_utc(match_data)
+    # Если не смогли распарсить дату — просто пропускаем матч,
+    # чтобы не уронить весь sync-season на одном кривом payload.
+    if kickoff_dt is None:
+        return None
+
     group_order_id = _extract_group_order_id(match_data)
 
     status = str(match_data.get("status", "UNKNOWN"))
@@ -140,7 +216,8 @@ def upsert_match_from_payload(
     score_team1 = match_data.get("score_team1")
     score_team2 = match_data.get("score_team2")
 
-    if not match:
+    if match is None:
+        # Новый матч
         match = Match(
             external_match_id=external_id,
             league_id=league.id,
@@ -152,11 +229,12 @@ def upsert_match_from_payload(
             team2_name=team2_name,
             score_team1=score_team1,
             score_team2=score_team2,
-            # raw_payload должен быть JSON-сериализуемым — сюда будем передавать dict
+            # raw_payload должен быть JSON-сериализуемым — сюда кладём dict
             raw_payload=dict(match_data),
         )
         db.add(match)
     else:
+        # Обновление существующего матча
         match.group_order_id = group_order_id
         match.kickoff_utc = kickoff_dt
         match.status = status
@@ -196,4 +274,3 @@ def bulk_upsert_matches_from_board(
         upsert_match_from_payload(db, league, season, m)
 
     db.commit()
-#test
