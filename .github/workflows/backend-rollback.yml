@@ -1,0 +1,84 @@
+name: Backend Rollback (prod)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Rollback mode: previous (rollout undo) or version (set image to prod-vX.Y.Z)"
+        required: true
+        default: "version"
+        type: choice
+        options:
+          - version
+          - previous
+      version:
+        description: "Target version for mode=version (example: 0.1.0 -> tag prod-v0.1.0)"
+        required: false
+      confirm:
+        description: "Type ROLLBACK to confirm"
+        required: true
+        default: ""
+
+concurrency:
+  group: backend-rollback-prod
+  cancel-in-progress: false
+
+jobs:
+  rollback_prod:
+    name: Rollback PROD
+    runs-on: self-hosted
+    environment: sporthub-prod
+
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "ROLLBACK" ]; then
+            echo "ERROR: confirmation failed. Type ROLLBACK in confirm input."
+            exit 1
+          fi
+
+      - name: Show current state
+        run: |
+          echo "Current PROD image:"
+          kubectl -n sporthub-prod describe deploy sporthub-backend | grep -i image || true
+          echo "Rollout history:"
+          kubectl -n sporthub-prod rollout history deployment/sporthub-backend || true
+
+      - name: Rollback to previous revision (kubectl rollout undo)
+        if: inputs.mode == 'previous'
+        run: |
+          echo "Rolling back to previous revision..."
+          kubectl -n sporthub-prod rollout undo deployment/sporthub-backend
+          kubectl -n sporthub-prod rollout status deployment/sporthub-backend --timeout=180s
+
+      - name: Rollback to specific version (prod-vX.Y.Z)
+        if: inputs.mode == 'version'
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: inputs.version is required when mode=version"
+            exit 1
+          fi
+
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
+          TAG="prod-v$VERSION"
+
+          if [ -z "$IMAGE" ]; then
+            echo "ERROR: DOCKERHUB_USERNAME secret is empty"
+            exit 1
+          fi
+
+          echo "Target image: $IMAGE:$TAG"
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          docker pull "$IMAGE:$TAG"
+
+          kubectl -n sporthub-prod set image deployment/sporthub-backend backend="$IMAGE:$TAG"
+          kubectl -n sporthub-prod rollout status deployment/sporthub-backend --timeout=180s
+
+      - name: Post-check
+        run: |
+          echo "New PROD image:"
+          kubectl -n sporthub-prod describe deploy sporthub-backend | grep -i image || true
+          echo "Health check:"
+          curl -s -H "Host: sporthub.local" http://192.168.56.200/api/health || true
+          echo
