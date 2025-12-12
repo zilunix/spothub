@@ -70,11 +70,11 @@ jobs:
 
       - name: Docker login
         run: |
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USER }}" --password-stdin
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Build
         run: |
-          IMAGE="${{ secrets.DOCKERHUB_USER }}/full-mvp-backend"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
           SHA="${GITHUB_SHA}"
           SHA7="$(echo "$SHA" | cut -c1-7)"
           VERSION="${{ steps.ver.outputs.version }}"
@@ -83,7 +83,7 @@ jobs:
 
       - name: Push
         run: |
-          IMAGE="${{ secrets.DOCKERHUB_USER }}/full-mvp-backend"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
           SHA="${GITHUB_SHA}"
           VERSION="${{ steps.ver.outputs.version }}"
           SHA7="$(echo "$SHA" | cut -c1-7)"
