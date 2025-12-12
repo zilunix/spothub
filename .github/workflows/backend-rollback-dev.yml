@@ -1,0 +1,83 @@
+name: Backend Rollback (dev)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Rollback mode: previous (rollout undo) or sha (set image to dev-<sha>)"
+        required: true
+        default: "sha"
+        type: choice
+        options:
+          - sha
+          - previous
+      sha:
+        description: "Target commit SHA for mode=sha (full SHA recommended)"
+        required: false
+      confirm:
+        description: "Type ROLLBACK to confirm"
+        required: true
+        default: ""
+
+concurrency:
+  group: backend-rollback-dev
+  cancel-in-progress: false
+
+jobs:
+  rollback_dev:
+    name: Rollback DEV
+    runs-on: self-hosted
+
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "ROLLBACK" ]; then
+            echo "ERROR: confirmation failed. Type ROLLBACK in confirm input."
+            exit 1
+          fi
+
+      - name: Show current state
+        run: |
+          echo "Current DEV image:"
+          kubectl -n sporthub-dev describe deploy sporthub-backend | grep -i image || true
+          echo "Rollout history:"
+          kubectl -n sporthub-dev rollout history deployment/sporthub-backend || true
+
+      - name: Rollback to previous revision (kubectl rollout undo)
+        if: inputs.mode == 'previous'
+        run: |
+          echo "Rolling back to previous revision..."
+          kubectl -n sporthub-dev rollout undo deployment/sporthub-backend
+          kubectl -n sporthub-dev rollout status deployment/sporthub-backend --timeout=180s
+
+      - name: Rollback to specific SHA (dev-<sha>)
+        if: inputs.mode == 'sha'
+        run: |
+          SHA="${{ inputs.sha }}"
+          if [ -z "$SHA" ]; then
+            echo "ERROR: inputs.sha is required when mode=sha"
+            exit 1
+          fi
+
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
+          TAG="dev-$SHA"
+
+          if [ -z "$IMAGE" ]; then
+            echo "ERROR: DOCKERHUB_USERNAME secret is empty"
+            exit 1
+          fi
+
+          echo "Target image: $IMAGE:$TAG"
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          docker pull "$IMAGE:$TAG"
+
+          kubectl -n sporthub-dev set image deployment/sporthub-backend backend="$IMAGE:$TAG"
+          kubectl -n sporthub-dev rollout status deployment/sporthub-backend --timeout=180s
+
+      - name: Post-check
+        run: |
+          echo "New DEV image:"
+          kubectl -n sporthub-dev describe deploy sporthub-backend | grep -i image || true
+          echo "Health check:"
+          curl -s -H "Host: dev.sporthub.local" http://192.168.56.200/api/health || true
+          echo
