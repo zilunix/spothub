@@ -22,10 +22,6 @@ jobs:
   prepare:
     name: Decide deploy target
     runs-on: self-hosted
-    if: |
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'workflow_dispatch')
     outputs:
       env: ${{ steps.target.outputs.env }}
       sha: ${{ steps.meta.outputs.sha }}
