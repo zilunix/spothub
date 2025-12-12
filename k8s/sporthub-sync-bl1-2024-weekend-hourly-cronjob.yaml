@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sporthub-sync-bl1-2024-weekend-hourly
+  namespace: sporthub-dev
+  labels:
+    app: sporthub
+    component: sync
+spec:
+  # Если твой Kubernetes не поддерживает timeZone — убери эту строку
+  timeZone: "Europe/Paris"
+
+  # Каждый час в 10..22 по выходным
+  schedule: "0 10-22 * * 6,0"
+
+  # Не запускать параллельно (если предыдущий не успел закончить)
+  concurrencyPolicy: Forbid
+
+  # Если контроллер пропустил время запуска (перезапуск/лаг) — не догоняем слишком старые
+  startingDeadlineSeconds: 600
+
+  # История джобов
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+
+      # Жесткий таймаут на job (чтобы не зависала)
+      activeDeadlineSeconds: 180
+
+      # TTL для удаления completed job (чтобы не копились)
+      ttlSecondsAfterFinished: 3600
+
+      template:
+        metadata:
+          labels:
+            app: sporthub
+            component: sync
+        spec:
+          restartPolicy: OnFailure
+
+          # Минимальные права сервис-аккаунта не нужны, отключаем автомонтирование токена
+          automountServiceAccountToken: false
+
+          # Базовая гигиена безопасности
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+
+          containers:
+            - name: sync
+              image: curlimages/curl:8.6.0
+              imagePullPolicy: IfNotPresent
+
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "32Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "128Mi"
+
+              env:
+                - name: SYNC_URL
+                  value: "http://sporthub-backend:8000/api/admin/sync-season?league=bl1&season=2024"
+
+              command:
+                - sh
+                - -lc
+                - |
+                  set -euo pipefail
+                  echo "[sync] POST $SYNC_URL"
+                  # --fail: ненулевой код при 4xx/5xx
+                  # --retry: повторить при сетевых сбоях
+                  # --retry-all-errors: ретраить не только transient
+                  curl --fail --show-error --silent \
+                    --retry 3 --retry-delay 2 --retry-all-errors \
+                    -X POST "$SYNC_URL"
+                  echo
+                  echo "[sync] done"
