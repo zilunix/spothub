@@ -20,25 +20,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  prepare:
+    name: Decide deploy target
     runs-on: self-hosted
-    # Авто-деплой только после успешного CI и только для push-событий (не PR)
     if: |
       (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push') ||
+       github.event.workflow_run.conclusion == 'success') ||
       (github.event_name == 'workflow_dispatch')
-
+    outputs:
+      env: ${{ steps.target.outputs.env }}
+      sha: ${{ steps.meta.outputs.sha }}
+      version: ${{ steps.ver.outputs.version }}
+      image: ${{ steps.img.outputs.image }}
     steps:
-      - name: Resolve SHA and commit message
+      - name: Resolve SHA
         id: meta
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             SHA="${{ github.event.workflow_run.head_sha }}"
-            MSG="${{ github.event.workflow_run.head_commit.message }}"
           else
             SHA="${{ inputs.sha }}"
-            MSG=""
           fi
 
           if [ -z "$SHA" ]; then
@@ -47,14 +48,20 @@ jobs:
 
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
-          echo "msg<<__EOF__" >> "$GITHUB_OUTPUT"
-          echo "$MSG" >> "$GITHUB_OUTPUT"
-          echo "__EOF__" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout code at SHA (to read VERSION)
+      - name: Checkout code at SHA
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.meta.outputs.sha }}
+
+      - name: Read commit message from git
+        id: msg
+        run: |
+          MSG="$(git log -1 --format=%B)"
+          echo "message<<__EOF__" >> "$GITHUB_OUTPUT"
+          echo "$MSG" >> "$GITHUB_OUTPUT"
+          echo "__EOF__" >> "$GITHUB_OUTPUT"
+          echo "Commit message:"
+          echo "$MSG"
 
       - name: Read version
         id: ver
@@ -63,17 +70,20 @@ jobs:
           if [ -z "$VERSION" ]; then echo "backend/VERSION is empty"; exit 1; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve image repo
+        id: img
+        run: |
+          echo "image=${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend" >> "$GITHUB_OUTPUT"
+
       - name: Decide target environment
         id: target
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             ENV="${{ inputs.environment }}"
           else
-            MSG="${{ steps.meta.outputs.msg }}"
+            MSG="${{ steps.msg.outputs.message }}"
             LMSG="$(echo "$MSG" | tr '[:upper:]' '[:lower:]')"
             ENV="none"
-
-            # приоритет prod, если вдруг оба маркера
             echo "$LMSG" | grep -q "deploy:dev"  && ENV="dev"
             echo "$LMSG" | grep -q "deploy:prod" && ENV="prod"
           fi
@@ -83,33 +93,41 @@ jobs:
           echo "SHA: ${{ steps.meta.outputs.sha }}"
           echo "VERSION: ${{ steps.ver.outputs.version }}"
 
-      - name: Stop if no deploy requested
-        if: steps.target.outputs.env == 'none'
-        run: |
-          echo "No deploy marker found (deploy:dev / deploy:prod). Skipping deploy."
-          exit 0
-
+  deploy_dev:
+    name: Deploy to DEV
+    runs-on: self-hosted
+    needs: [ prepare ]
+    if: needs.prepare.outputs.env == 'dev'
+    steps:
       - name: Docker login
         run: |
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Deploy to DEV
-        if: steps.target.outputs.env == 'dev'
+      - name: Deploy
         run: |
-          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
-          SHA="${{ steps.meta.outputs.sha }}"
+          IMAGE="${{ needs.prepare.outputs.image }}"
+          SHA="${{ needs.prepare.outputs.sha }}"
 
           echo "Deploying DEV image: $IMAGE:dev-$SHA"
           kubectl -n sporthub-dev set image deployment/sporthub-backend backend="$IMAGE:dev-$SHA"
           kubectl -n sporthub-dev rollout status deployment/sporthub-backend --timeout=180s
 
-      - name: Promote and Deploy to PROD
-        if: steps.target.outputs.env == 'prod'
-        environment: sporthub-prod
+  deploy_prod:
+    name: Promote and Deploy to PROD
+    runs-on: self-hosted
+    needs: [ prepare ]
+    if: needs.prepare.outputs.env == 'prod'
+    environment: sporthub-prod
+    steps:
+      - name: Docker login
         run: |
-          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
-          SHA="${{ steps.meta.outputs.sha }}"
-          VERSION="${{ steps.ver.outputs.version }}"
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Promote images
+        run: |
+          IMAGE="${{ needs.prepare.outputs.image }}"
+          SHA="${{ needs.prepare.outputs.sha }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
 
           echo "Promoting $IMAGE:dev-$SHA -> $IMAGE:prod-v$VERSION"
           docker pull "$IMAGE:dev-$SHA"
@@ -121,6 +139,11 @@ jobs:
           docker push "$IMAGE:prod-$SHA"
           docker push "$IMAGE:prod-v$VERSION"
           docker push "$IMAGE:prod-latest"
+
+      - name: Deploy
+        run: |
+          IMAGE="${{ needs.prepare.outputs.image }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
 
           echo "Deploying PROD image: $IMAGE:prod-v$VERSION"
           kubectl -n sporthub-prod set image deployment/sporthub-backend backend="$IMAGE:prod-v$VERSION"
