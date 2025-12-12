@@ -4,6 +4,12 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from typing import List
+from app.repositories.matches import list_archive_matches
+from app.schemas.match import ArchiveMatchesResponse
+
+from app.repositories.matches import list_archive_matches, get_archive_meta
+from app.schemas.match import ArchiveMatchesResponse, ArchiveMetaResponse
+
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -413,3 +419,40 @@ async def admin_sync_season(
         "season": season,
         "synced": len(summaries),
     }
+
+@router.get(
+    "/archive",
+    response_model=ArchiveMatchesResponse,
+    summary="Архив матчей из БД (Postgres)",
+)
+def get_archive(
+    league: str = Query(..., description="Shortcut лиги, например bl1"),
+    season: int | None = Query(default=None, description="Год сезона, например 2024"),
+    date_from: dt.date | None = Query(default=None, description="YYYY-MM-DD"),
+    date_to: dt.date | None = Query(default=None, description="YYYY-MM-DD (включительно)"),
+    status: str | None = Query(default=None, description="FINISHED/LIVE/SCHEDULED/UNKNOWN"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> ArchiveMatchesResponse:
+    total, items = list_archive_matches(
+        db=db,
+        league_shortcut=league,
+        season_year=season,
+        date_from=date_from,
+        date_to=date_to,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
+    return ArchiveMatchesResponse(page=page, page_size=page_size, total=total, items=items)
+
+@router.get(
+    "/archive/meta",
+    response_model=ArchiveMetaResponse,
+    summary="Метаданные архива из БД (лиги и сезоны)",
+)
+def get_archive_meta_endpoint(
+    db: Session = Depends(get_db),
+) -> ArchiveMetaResponse:
+    return ArchiveMetaResponse(items=get_archive_meta(db))

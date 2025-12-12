@@ -1,8 +1,10 @@
 # app/repositories/matches.py
 from __future__ import annotations
-
+import datetime as dt
+from app.schemas.match import MatchSummary, MatchStatus
 from datetime import datetime
 from typing import Iterable, Mapping, Any, Optional
+from app.schemas.match import ArchiveLeagueInfo
 
 from sqlalchemy.orm import Session
 
@@ -274,3 +276,114 @@ def bulk_upsert_matches_from_board(
         upsert_match_from_payload(db, league, season, m)
 
     db.commit()
+def list_archive_matches(
+    db: Session,
+    league_shortcut: str,
+    season_year: Optional[int],
+    date_from: Optional[dt.date],
+    date_to: Optional[dt.date],
+    status: Optional[str],
+    page: int,
+    page_size: int,
+) -> tuple[int, list[MatchSummary]]:
+    """
+    Чтение архива матчей из БД.
+    - league_shortcut: например 'bl1'
+    - season_year: например 2024 (можно None)
+    - date_from/date_to: фильтр по kickoff_utc (UTC), можно None
+    - status: строка ('FINISHED'/'LIVE'/'SCHEDULED'/'UNKNOWN'), можно None
+    - page: 1..N
+    - page_size: 1..200
+    """
+    league = db.query(League).filter(League.shortcut == league_shortcut).first()
+    if league is None:
+        return 0, []
+
+    q = (
+        db.query(Match, Season)
+        .join(Season, Season.id == Match.season_id)
+        .filter(Match.league_id == league.id)
+    )
+
+    if season_year is not None:
+        q = q.filter(Season.year == int(season_year))
+
+    if date_from is not None:
+        start_dt = dt.datetime.combine(date_from, dt.time.min, tzinfo=dt.timezone.utc)
+        q = q.filter(Match.kickoff_utc >= start_dt)
+
+    if date_to is not None:
+        end_exclusive = dt.datetime.combine(
+            date_to + dt.timedelta(days=1),
+            dt.time.min,
+            tzinfo=dt.timezone.utc,
+        )
+        q = q.filter(Match.kickoff_utc < end_exclusive)
+
+    if status is not None:
+        q = q.filter(Match.status == status)
+
+    total = q.count()
+
+    offset = (page - 1) * page_size
+    rows = (
+        q.order_by(Match.kickoff_utc.desc())
+        .limit(page_size)
+        .offset(offset)
+        .all()
+    )
+
+    items: list[MatchSummary] = []
+    for m, s in rows:
+        try:
+            st = MatchStatus(m.status)
+        except Exception:
+            st = MatchStatus.UNKNOWN
+
+        items.append(
+            MatchSummary(
+                id=m.external_match_id,              # важно: наружу отдаём external id
+                league_shortcut=league.shortcut,
+                league_season=s.year,
+                group_order_id=m.group_order_id,
+                team1_name=m.team1_name,
+                team2_name=m.team2_name,
+                kickoff_utc=m.kickoff_utc,
+                status=st,
+                score_team1=m.score_team1,
+                score_team2=m.score_team2,
+            )
+        )
+
+    return total, items
+
+
+def get_archive_meta(db: Session) -> list[ArchiveLeagueInfo]:
+    """
+    Метаданные архива из БД:
+    - какие лиги есть
+    - какие годы сезонов по каждой лиге
+    """
+    leagues = db.query(League).order_by(League.shortcut).all()
+
+    items: list[ArchiveLeagueInfo] = []
+    for l in leagues:
+        years_rows = (
+            db.query(Season.year)
+            .filter(Season.league_id == l.id)
+            .order_by(Season.year.desc())
+            .all()
+        )
+        seasons = [y for (y,) in years_rows]
+
+        items.append(
+            ArchiveLeagueInfo(
+                shortcut=l.shortcut,
+                name=l.name,
+                country=l.country,
+                sport=l.sport,
+                seasons=seasons,
+            )
+        )
+
+    return items

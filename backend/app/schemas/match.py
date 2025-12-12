@@ -114,3 +114,26 @@ def classify_match(raw_match: dict[str, Any], now: datetime | None = None) -> Ma
         score_team1=score1,
         score_team2=score2,
     )
+class MatchStatus(str, Enum):
+    SCHEDULED = "SCHEDULED"
+    LIVE = "LIVE"
+    FINISHED = "FINISHED"
+    UNKNOWN = "UNKNOWN"   # <- добавить
+
+
+class ArchiveMatchesResponse(BaseModel):
+    page: int
+    page_size: int
+    total: int
+    items: list[MatchSummary]
+
+class ArchiveLeagueInfo(BaseModel):
+    shortcut: str
+    name: str
+    country: str
+    sport: str
+    seasons: list[int]
+
+
+class ArchiveMetaResponse(BaseModel):
+    items: list[ArchiveLeagueInfo]
