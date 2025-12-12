@@ -9,6 +9,11 @@ on:
       - ".github/workflows/frontend-dev-deploy.yml"
   pull_request:
     branches: [ "main" ]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+      - ".github/workflows/frontend-dev-deploy.yml"
+  workflow_dispatch:
 
 jobs:
   build-and-push:
@@ -31,4 +36,3 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-frontend:dev-${{ github.sha }}
-            
