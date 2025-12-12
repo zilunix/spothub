@@ -4,15 +4,13 @@ name: Backend CI (tests, build & push)
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend-ci.yml"
   pull_request:
     branches: [ "main" ]
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
-
+      - ".github/workflows/backend-deploy.yml"
+  workflow_dispatch:
 concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
