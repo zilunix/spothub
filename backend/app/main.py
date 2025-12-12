@@ -73,13 +73,20 @@ async def legacy_matches(
 
 @app.get("/board", tags=["sports-legacy"])
 async def legacy_board(
+     # ВАЖНО: передаём int, иначе Query-дефолты в handler сломают timedelta
+    days_back: int = 7,
+    days_ahead: int = 7,
     client: OpenLigaDBClient = Depends(get_client),
 ):
     """
     Legacy маршрут для /board.
     Нужен из-за ingress rewrite: внешний /api/board превращается во внутренний /board.
     """
-    return await get_board_handler(client=client)
+    return await get_board_handler(
+        days_back=days_back,
+        days_ahead=days_ahead,
+        client=client,
+    )
 
 
 @app.get("/debug/openligadb/ping", tags=["debug"])
