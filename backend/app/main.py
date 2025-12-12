@@ -11,6 +11,7 @@ from app.sports_api import (
     get_client,
     get_leagues as get_leagues_handler,
     get_matches as get_matches_handler,
+    get_board as get_board_handler,
 )
 
 app = FastAPI(
@@ -69,6 +70,16 @@ async def legacy_matches(
         date_str=date_str,
         client=client,
     )
+
+@app.get("/board", tags=["sports-legacy"])
+async def legacy_board(
+    client: OpenLigaDBClient = Depends(get_client),
+):
+    """
+    Legacy маршрут для /board.
+    Нужен из-за ingress rewrite: внешний /api/board превращается во внутренний /board.
+    """
+    return await get_board_handler(client=client)
 
 
 @app.get("/debug/openligadb/ping", tags=["debug"])
