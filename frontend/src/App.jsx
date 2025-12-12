@@ -3,16 +3,15 @@ import React, { useState } from "react";
 import { BoardPage } from "./pages/BoardPage";
 import { ArchivePage } from "./pages/ArchivePage";
 
-export default function App() {
+export default function App({ config }) {
   const [activeTab, setActiveTab] = useState("board"); // "board" | "archive"
+  const defaultLeagues = config?.defaultLeagues;
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>SportHub</h1>
-        <p className="subtitle">
-          MVP-панель матчей (Kubernetes домашняя лаба)
-        </p>
+        <p className="subtitle">MVP-панель матчей (Kubernetes домашняя лаба)</p>
 
         <nav className="tabs">
           <button
@@ -33,7 +32,11 @@ export default function App() {
       </header>
 
       <main className="content">
-        {activeTab === "board" ? <BoardPage /> : <ArchivePage />}
+        {activeTab === "board" ? (
+          <BoardPage defaultLeagues={defaultLeagues} />
+        ) : (
+          <ArchivePage />
+        )}
       </main>
 
       <footer className="footer">
