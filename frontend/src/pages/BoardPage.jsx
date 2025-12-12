@@ -1,4 +1,3 @@
-// src/pages/BoardPage.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { fetchBoard } from "../api";
 import { BoardFilters } from "../components/BoardFilters";
@@ -8,30 +7,33 @@ import { RecentMatchesSection } from "../components/RecentMatchesSection";
 
 const REFRESH_INTERVAL_MS = 30_000; // 30 секунд
 
-export function BoardPage() {
+function normalizeDefaultLeagues(defaultLeagues) {
+  if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
+    return defaultLeagues;
+  }
+  return ["bl1"];
+}
+
+export function BoardPage({ defaultLeagues }) {
   const [board, setBoard] = useState({
     live: [],
     upcoming: [],
     recent: [],
   });
 
-  const [loading, setLoading] = useState(false);   // для первой загрузки
+  const [loading, setLoading] = useState(false); // для первой загрузки
   const [error, setError] = useState(null);
 
-  const [selectedLeagues, setSelectedLeagues] = useState(["bl1"]);
+  const initialLeagues = normalizeDefaultLeagues(defaultLeagues);
+
+  const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
   const [selectedSeason, setSelectedSeason] = useState("");
 
   const intervalRef = useRef(null);
 
-  /**
-   * Загрузка данных с /api/board.
-   * showLoader = true — показываем "Загрузка..." (первая загрузка или смена фильтров).
-   * showLoader = false — тихое обновление по таймеру.
-   */
   const loadBoard = async (params, { showLoader = false } = {}) => {
-    if (showLoader) {
-      setLoading(true);
-    }
+    if (showLoader) setLoading(true);
+
     try {
       setError(null);
       const data = await fetchBoard(params);
@@ -44,48 +46,35 @@ export function BoardPage() {
       console.error("Failed to fetch board:", e);
       setError(e.message || "Ошибка загрузки данных.");
     } finally {
-      if (showLoader) {
-        setLoading(false);
-      }
+      if (showLoader) setLoading(false);
     }
   };
 
-  /**
-   * Эффект:
-   * - срабатывает при изменении selectedLeagues / selectedSeason;
-   * - делает мгновенную загрузку (с лоадером);
-   * - запускает setInterval с обновлением каждые REFRESH_INTERVAL_MS;
-   * - при очистке эффекта/размонтаже очищает таймер.
-   */
   useEffect(() => {
     const params = {
       leagues: selectedLeagues,
       season: selectedSeason || undefined,
     };
 
-    // 1) первая загрузка при изменении фильтров
     loadBoard(params, { showLoader: true });
 
-    // 2) очищаем старый интервал, если был
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
+    if (intervalRef.current) clearInterval(intervalRef.current);
 
-    // 3) запускаем новый интервал
     intervalRef.current = setInterval(() => {
       loadBoard(params, { showLoader: false });
     }, REFRESH_INTERVAL_MS);
 
-    // 4) очистка при размонтировании / перед следующим запуском эффекта
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [selectedLeagues, selectedSeason]);
 
   const handleFiltersChange = ({ leagues, season }) => {
-    setSelectedLeagues(leagues || []);
+    const fallback = normalizeDefaultLeagues(defaultLeagues);
+    const nextLeagues =
+      Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
+
+    setSelectedLeagues(nextLeagues);
     setSelectedSeason(season || "");
   };
 
