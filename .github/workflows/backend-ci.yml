@@ -6,6 +6,11 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
   workflow_dispatch:
 
 jobs:
@@ -35,6 +40,8 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     needs: tests
+    # На PR лучше не пушить образы, только на push в main или ручной запуск
+    if: github.event_name != 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
