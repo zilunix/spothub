@@ -1,4 +1,3 @@
-
 name: Backend Deploy (dev/prod)
 
 on:
@@ -31,7 +30,6 @@ jobs:
       env: ${{ steps.target.outputs.env }}
       sha: ${{ steps.meta.outputs.sha }}
       version: ${{ steps.ver.outputs.version }}
-      image: ${{ steps.img.outputs.image }}
     steps:
       - name: Resolve SHA
         id: meta
@@ -70,11 +68,6 @@ jobs:
           if [ -z "$VERSION" ]; then echo "backend/VERSION is empty"; exit 1; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve image repo
-        id: img
-        run: |
-          echo "image=${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend" >> "$GITHUB_OUTPUT"
-
       - name: Decide target environment
         id: target
         run: |
@@ -105,8 +98,10 @@ jobs:
 
       - name: Deploy
         run: |
-          IMAGE="${{ needs.prepare.outputs.image }}"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
           SHA="${{ needs.prepare.outputs.sha }}"
+
+          if [ -z "$IMAGE" ]; then echo "ERROR: IMAGE is empty"; exit 1; fi
 
           echo "Deploying DEV image: $IMAGE:dev-$SHA"
           kubectl -n sporthub-dev set image deployment/sporthub-backend backend="$IMAGE:dev-$SHA"
@@ -125,9 +120,11 @@ jobs:
 
       - name: Promote images
         run: |
-          IMAGE="${{ needs.prepare.outputs.image }}"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
           SHA="${{ needs.prepare.outputs.sha }}"
           VERSION="${{ needs.prepare.outputs.version }}"
+
+          if [ -z "$IMAGE" ]; then echo "ERROR: IMAGE is empty"; exit 1; fi
 
           echo "Promoting $IMAGE:dev-$SHA -> $IMAGE:prod-v$VERSION"
           docker pull "$IMAGE:dev-$SHA"
@@ -142,10 +139,11 @@ jobs:
 
       - name: Deploy
         run: |
-          IMAGE="${{ needs.prepare.outputs.image }}"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/full-mvp-backend"
           VERSION="${{ needs.prepare.outputs.version }}"
+
+          if [ -z "$IMAGE" ]; then echo "ERROR: IMAGE is empty"; exit 1; fi
 
           echo "Deploying PROD image: $IMAGE:prod-v$VERSION"
           kubectl -n sporthub-prod set image deployment/sporthub-backend backend="$IMAGE:prod-v$VERSION"
           kubectl -n sporthub-prod rollout status deployment/sporthub-backend --timeout=180s
-
