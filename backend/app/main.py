@@ -1,17 +1,28 @@
 # backend/app/main.py
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI
+import datetime as dt
+
+from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from app.settings import settings
+from app.db import get_db
 from app.clients.openligadb_client import OpenLigaDBClient
 from app.sports_api import (
     router as sports_router,
     get_client,
+    # handlers (sports)
     get_leagues as get_leagues_handler,
     get_matches as get_matches_handler,
     get_board as get_board_handler,
+    # handlers (archive)
+    get_archive_leagues as get_archive_leagues_handler,
+    get_archive_seasons as get_archive_seasons_handler,
+    get_archive_matches as get_archive_matches_handler,
+    get_archive as get_archive_handler,
+    get_archive_meta_endpoint as get_archive_meta_handler,
 )
 
 app = FastAPI(
@@ -44,6 +55,8 @@ async def root() -> dict:
 app.include_router(sports_router)
 
 # ==== Legacy-роуты для текущего фронтенда (/leagues, /matches, /board) ====
+# Нужны из-за ingress rewrite: внешний /api/* превращается во внутренний /*.
+# Поэтому backend должен поддерживать “внутренние” пути без /api.
 
 
 @app.get("/leagues", tags=["sports-legacy"])
@@ -52,7 +65,7 @@ async def legacy_leagues(
 ):
     """
     Старый маршрут, который использует тот же обработчик, что и /api/leagues.
-    Нужен для уже задеплоенного фронтенда, который ходит на /leagues.
+    Нужен для фронтенда/ingress, когда внешний /api/leagues превращается во /leagues.
     """
     return await get_leagues_handler(client=client)
 
@@ -78,8 +91,7 @@ async def legacy_board(
     # Эти параметры нужны, потому что ingress rewrite превращает внешний /api/board
     # во внутренний /board. Поэтому legacy /board должен поддерживать те же query.
     leagues: str | None = None,  # "bl1,bl2"
-    season: int | None = None,   # 2024
-    # окно (можно регулировать отдельно)
+    season: int | None = None,   # 2024/2025
     days_back: int = 7,
     days_ahead: int = 7,
     client: OpenLigaDBClient = Depends(get_client),
@@ -95,6 +107,65 @@ async def legacy_board(
         days_ahead=days_ahead,
         client=client,
     )
+
+
+# ==== Legacy-роуты для архива (/archive/*) ====
+# Аналогично /board: внешний /api/archive/* превращается во внутренний /archive/*.
+# Поэтому добавляем “внутренние” пути без /api и проксируем в те же handlers.
+
+
+@app.get("/archive/meta", tags=["archive-legacy"])
+def legacy_archive_meta(
+    db: Session = Depends(get_db),
+):
+    return get_archive_meta_handler(db=db)
+
+
+@app.get("/archive", tags=["archive-legacy"])
+def legacy_archive(
+    league: str = Query(..., description="Shortcut лиги, например bl1"),
+    season: int | None = Query(default=None, description="Год сезона, например 2024"),
+    date_from: dt.date | None = Query(default=None, description="YYYY-MM-DD"),
+    date_to: dt.date | None = Query(default=None, description="YYYY-MM-DD (включительно)"),
+    status: str | None = Query(default=None, description="FINISHED/LIVE/SCHEDULED/UNKNOWN"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    return get_archive_handler(
+        league=league,
+        season=season,
+        date_from=date_from,
+        date_to=date_to,
+        status=status,
+        page=page,
+        page_size=page_size,
+        db=db,
+    )
+
+
+@app.get("/archive/leagues", tags=["archive-legacy"])
+async def legacy_archive_leagues(
+    client: OpenLigaDBClient = Depends(get_client),
+):
+    return await get_archive_leagues_handler(client=client)
+
+
+@app.get("/archive/{league}/seasons", tags=["archive-legacy"])
+async def legacy_archive_seasons(
+    league: str,
+    client: OpenLigaDBClient = Depends(get_client),
+):
+    return await get_archive_seasons_handler(league=league, client=client)
+
+
+@app.get("/archive/{league}/{season}/matches", tags=["archive-legacy"])
+async def legacy_archive_matches(
+    league: str,
+    season: int,
+    client: OpenLigaDBClient = Depends(get_client),
+):
+    return await get_archive_matches_handler(league=league, season=season, client=client)
 
 
 @app.get("/debug/openligadb/ping", tags=["debug"])
