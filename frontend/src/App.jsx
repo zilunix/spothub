@@ -5,7 +5,6 @@ import { ArchivePage } from "./pages/ArchivePage";
 
 export default function App({ config }) {
   const [activeTab, setActiveTab] = useState("board"); // "board" | "archive"
-  const defaultLeagues = config?.defaultLeagues;
 
   return (
     <div className="app">
@@ -33,7 +32,12 @@ export default function App({ config }) {
 
       <main className="content">
         {activeTab === "board" ? (
-          <BoardPage defaultLeagues={defaultLeagues} />
+          <BoardPage
+            defaultLeagues={config?.defaultLeagues}
+            defaultSeason={config?.defaultSeason}
+            defaultDaysBack={config?.daysBack}
+            defaultDaysAhead={config?.daysAhead}
+          />
         ) : (
           <ArchivePage />
         )}

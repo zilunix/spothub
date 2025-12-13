@@ -23,7 +23,12 @@ function clampInt(value, { min, max, fallback }) {
   return i;
 }
 
-export function BoardPage({ defaultLeagues }) {
+export function BoardPage({
+  defaultLeagues,
+  defaultSeason,
+  defaultDaysBack,
+  defaultDaysAhead,
+}) {
   const [board, setBoard] = useState({
     date_from: null,
     date_to: null,
@@ -33,17 +38,25 @@ export function BoardPage({ defaultLeagues }) {
     recent: [],
   });
 
-  const [loading, setLoading] = useState(false); // для первой загрузки
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const initialLeagues = normalizeDefaultLeagues(defaultLeagues);
 
   const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
-  const [selectedSeason, setSelectedSeason] = useState(""); // строка для UI, в запрос уйдёт как число/undefined
 
-  // Окно доски (можно менять в UI)
-  const [daysBack, setDaysBack] = useState(7);
-  const [daysAhead, setDaysAhead] = useState(7);
+  // Важно: сезон по умолчанию берём из runtime config (dev сейчас 2025)
+  const [selectedSeason, setSelectedSeason] = useState(() =>
+    defaultSeason ? String(defaultSeason) : ""
+  );
+
+  // Окно доски по умолчанию тоже можно брать из runtime config
+  const [daysBack, setDaysBack] = useState(() =>
+    clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 })
+  );
+  const [daysAhead, setDaysAhead] = useState(() =>
+    clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 })
+  );
 
   const intervalRef = useRef(null);
 
@@ -81,7 +94,6 @@ export function BoardPage({ defaultLeagues }) {
     loadBoard(params, { showLoader: true });
 
     if (intervalRef.current) clearInterval(intervalRef.current);
-
     intervalRef.current = setInterval(() => {
       loadBoard(params, { showLoader: false });
     }, REFRESH_INTERVAL_MS);
@@ -97,7 +109,16 @@ export function BoardPage({ defaultLeagues }) {
       Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
 
     setSelectedLeagues(nextLeagues);
-    setSelectedSeason(season || "");
+
+    // если сезон не задан, оставляем пусто -> backend возьмёт дефолт (2025)
+    setSelectedSeason(season ? String(season) : "");
+  };
+
+  const handleResetDefaults = () => {
+    setSelectedLeagues(initialLeagues);
+    setSelectedSeason(defaultSeason ? String(defaultSeason) : "");
+    setDaysBack(clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 }));
+    setDaysAhead(clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 }));
   };
 
   const isEmpty =
@@ -111,14 +132,12 @@ export function BoardPage({ defaultLeagues }) {
     <div className="board-page">
       <h2>Спортивная доска</h2>
 
-      {/* Фильтры лиг/сезона */}
       <BoardFilters
         valueLeagues={selectedLeagues}
         valueSeason={selectedSeason}
         onChange={handleFiltersChange}
       />
 
-      {/* Управление окном (days_back/days_ahead) */}
       <div className="card" style={{ marginTop: 12 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -170,7 +189,18 @@ export function BoardPage({ defaultLeagues }) {
                 : "—"}
             </div>
           </div>
+
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <button type="button" className="tab" onClick={handleResetDefaults}>
+              Сбросить
+            </button>
+          </div>
         </div>
+
+        <p style={{ marginTop: 10, marginBottom: 0, opacity: 0.8 }}>
+          Если выбрать сезон, который не соответствует текущим датам, доска будет
+          пустой. Для “живых” матчей используйте актуальный сезон.
+        </p>
       </div>
 
       {loading && <p>Загрузка...</p>}
