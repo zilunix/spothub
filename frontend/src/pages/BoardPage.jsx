@@ -5,7 +5,7 @@ import { LiveMatchesSection } from "../components/LiveMatchesSection";
 import { UpcomingMatchesSection } from "../components/UpcomingMatchesSection";
 import { RecentMatchesSection } from "../components/RecentMatchesSection";
 
-const REFRESH_INTERVAL_MS = 30_000; // 30 секунд
+const DEFAULT_REFRESH_SECONDS = 30;
 
 function normalizeDefaultLeagues(defaultLeagues) {
   if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
@@ -28,6 +28,7 @@ export function BoardPage({
   defaultSeason,
   defaultDaysBack,
   defaultDaysAhead,
+  refreshSeconds,
 }) {
   const [board, setBoard] = useState({
     date_from: null,
@@ -83,6 +84,16 @@ export function BoardPage({
     }
   };
 
+  const refreshMs =
+    Math.max(
+      0,
+      clampInt(refreshSeconds, {
+        min: 0,
+        max: 3600,
+        fallback: DEFAULT_REFRESH_SECONDS,
+      })
+    ) * 1000;
+
   useEffect(() => {
     const params = {
       leagues: selectedLeagues,
@@ -94,14 +105,16 @@ export function BoardPage({
     loadBoard(params, { showLoader: true });
 
     if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      loadBoard(params, { showLoader: false });
-    }, REFRESH_INTERVAL_MS);
+    if (refreshMs > 0) {
+      intervalRef.current = setInterval(() => {
+        loadBoard(params, { showLoader: false });
+      }, refreshMs);
+    }
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [selectedLeagues, selectedSeason, daysBack, daysAhead]);
+  }, [selectedLeagues, selectedSeason, daysBack, daysAhead, refreshMs]);
 
   const handleFiltersChange = ({ leagues, season }) => {
     const fallback = normalizeDefaultLeagues(defaultLeagues);

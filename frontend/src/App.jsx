@@ -35,8 +35,9 @@ export default function App({ config }) {
           <BoardPage
             defaultLeagues={config?.defaultLeagues}
             defaultSeason={config?.defaultSeason}
-            defaultDaysBack={config?.daysBack}
-            defaultDaysAhead={config?.daysAhead}
+            defaultDaysBack={config?.defaultDaysBack}
+            defaultDaysAhead={config?.defaultDaysAhead}
+            refreshSeconds={config?.refreshSeconds}
           />
         ) : (
           <ArchivePage />
