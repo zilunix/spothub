@@ -7,6 +7,10 @@ import { RecentMatchesSection } from "../components/RecentMatchesSection";
 
 const DEFAULT_REFRESH_SECONDS = 30;
 
+// фиксированное окно для доски (без UI)
+const BOARD_DAYS_BACK = 7;
+const BOARD_DAYS_AHEAD = 7;
+
 function normalizeDefaultLeagues(defaultLeagues) {
   if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
     return defaultLeagues.map((x) => String(x).trim()).filter(Boolean);
@@ -14,38 +18,30 @@ function normalizeDefaultLeagues(defaultLeagues) {
   return ["bl1"];
 }
 
-function clampInt(value, { min, max, fallback }) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  const i = Math.trunc(n);
-  if (i < min) return min;
-  if (i > max) return max;
-  return i;
+function uniq(arr) {
+  return Array.from(
+    new Set(
+      (Array.isArray(arr) ? arr : [])
+        .map((x) => String(x).trim())
+        .filter(Boolean)
+    )
+  );
 }
 
-export function BoardPage({
-  defaultLeagues,
-  defaultSeason,
-  defaultDaysBack,
-  defaultDaysAhead,
-  refreshSeconds,
-}) {
+export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
   const initialLeagues = useMemo(
     () => normalizeDefaultLeagues(defaultLeagues),
     [defaultLeagues]
   );
 
   const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
-  const [selectedSeason, setSelectedSeason] = useState(() =>
-    defaultSeason ? String(defaultSeason) : ""
-  );
 
-  const [daysBack, setDaysBack] = useState(() =>
-    clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 })
-  );
-  const [daysAhead, setDaysAhead] = useState(() =>
-    clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 })
-  );
+  // “оперативная доска”: сезон фиксируем
+  const season = useMemo(() => {
+    const n = Number(defaultSeason);
+    if (Number.isFinite(n) && n > 2000) return n;
+    return new Date().getFullYear();
+  }, [defaultSeason]);
 
   const [board, setBoard] = useState({
     date_from: null,
@@ -62,27 +58,14 @@ export function BoardPage({
   const intervalRef = useRef(null);
 
   const leagueOptions = useMemo(() => {
-    const leagues = normalizeDefaultLeagues(defaultLeagues);
-    return leagues.map((x) => ({ value: x, label: x }));
+    const base = ["bl1", "bl2"];
+    const extra = normalizeDefaultLeagues(defaultLeagues);
+    const merged = uniq([...base, ...extra]);
+    return merged.map((x) => ({ value: x, label: x.toUpperCase() }));
   }, [defaultLeagues]);
 
-  const seasonOptions = useMemo(() => {
-    const base = defaultSeason ? Number(defaultSeason) : null;
-    if (!base || !Number.isFinite(base)) return [];
-    const years = [];
-    for (let y = base + 1; y >= base - 8; y -= 1) years.push(y);
-    return years.map((y) => ({ value: String(y), label: String(y) }));
-  }, [defaultSeason]);
-
   const refreshMs =
-    Math.max(
-      0,
-      clampInt(refreshSeconds, {
-        min: 0,
-        max: 3600,
-        fallback: DEFAULT_REFRESH_SECONDS,
-      })
-    ) * 1000;
+    Math.max(0, Number(refreshSeconds ?? DEFAULT_REFRESH_SECONDS)) * 1000;
 
   const loadBoard = async (params, { showLoader = false } = {}) => {
     if (showLoader) setLoading(true);
@@ -109,9 +92,9 @@ export function BoardPage({
   useEffect(() => {
     const params = {
       leagues: selectedLeagues,
-      season: selectedSeason ? Number(selectedSeason) : undefined,
-      daysBack,
-      daysAhead,
+      season,
+      daysBack: BOARD_DAYS_BACK,
+      daysAhead: BOARD_DAYS_AHEAD,
     };
 
     loadBoard(params, { showLoader: true });
@@ -126,22 +109,17 @@ export function BoardPage({
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [selectedLeagues, selectedSeason, daysBack, daysAhead, refreshMs]);
+  }, [selectedLeagues, season, refreshMs]);
 
-  const handleFiltersChange = ({ leagues, season }) => {
+  const handleFiltersChange = ({ leagues }) => {
     const fallback = normalizeDefaultLeagues(defaultLeagues);
     const nextLeagues =
       Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
-
     setSelectedLeagues(nextLeagues);
-    setSelectedSeason(season ? String(season) : "");
   };
 
   const handleResetDefaults = () => {
     setSelectedLeagues(initialLeagues);
-    setSelectedSeason(defaultSeason ? String(defaultSeason) : "");
-    setDaysBack(clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 }));
-    setDaysAhead(clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 }));
   };
 
   const isEmpty =
@@ -157,42 +135,24 @@ export function BoardPage({
 
       <BoardFilters
         valueLeagues={selectedLeagues}
-        valueSeason={selectedSeason}
+        valueSeason={String(season)}
         onChange={handleFiltersChange}
         onReset={handleResetDefaults}
         leagueOptions={leagueOptions}
-        seasonOptions={seasonOptions}
+        showSeason={false}
       />
 
       <section className="controls" style={{ marginTop: 12 }}>
         <div className="control">
-          <label>Дней назад</label>
-          <input
-            type="number"
-            min={0}
-            max={30}
-            value={daysBack}
-            onChange={(e) =>
-              setDaysBack(
-                clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
-              )
-            }
-          />
+          <label>Сезон</label>
+          <div style={{ paddingTop: 10 }}>{season}</div>
         </div>
 
         <div className="control">
-          <label>Дней вперёд</label>
-          <input
-            type="number"
-            min={0}
-            max={30}
-            value={daysAhead}
-            onChange={(e) =>
-              setDaysAhead(
-                clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
-              )
-            }
-          />
+          <label>Окно</label>
+          <div style={{ paddingTop: 10 }}>
+            {BOARD_DAYS_BACK} назад / {BOARD_DAYS_AHEAD} вперёд
+          </div>
         </div>
 
         <div className="control">
@@ -214,21 +174,14 @@ export function BoardPage({
         </div>
       </section>
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <p style={{ margin: 0, opacity: 0.85 }}>
-          Если выбрать сезон, который не соответствует текущим датам, доска будет
-          пустой. Для “живых” матчей используйте актуальный сезон.
-        </p>
-      </div>
-
       {loading && <p>Загрузка...</p>}
       {error && <p style={{ color: "red" }}>Ошибка: {error}</p>}
 
       {isEmpty && (
         <div className="card" style={{ marginTop: 12 }}>
           <p style={{ margin: 0 }}>
-            Матчей не найдено в выбранном окне дат. Попробуй увеличить диапазон
-            “Дней назад/вперёд” или сменить сезон.
+            Матчей не найдено в фиксированном окне дат. Для расширенных выборок
+            используйте Архив.
           </p>
         </div>
       )}

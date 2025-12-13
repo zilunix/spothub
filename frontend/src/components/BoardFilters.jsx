@@ -19,9 +19,10 @@ export function BoardFilters({
   onChange,
   onReset,
 
-  // опции для UI
   leagueOptions = [], // [{value,label}]
   seasonOptions = [], // [{value,label}]
+
+  showSeason = true,
 }) {
   const [localLeagues, setLocalLeagues] = useState(valueLeagues || []);
   const [localSeason, setLocalSeason] = useState(valueSeason || "");
@@ -35,7 +36,6 @@ export function BoardFilters({
   }, [valueSeason]);
 
   const normalizedLeagueOptions = useMemo(() => {
-    // поддерживаем передачу простых строк (и fallback)
     const base =
       leagueOptions.length > 0
         ? leagueOptions
@@ -52,7 +52,7 @@ export function BoardFilters({
     e.preventDefault();
     onChange?.({
       leagues: localLeagues,
-      season: localSeason || undefined,
+      season: showSeason ? (localSeason || undefined) : undefined,
     });
   };
 
@@ -62,16 +62,13 @@ export function BoardFilters({
 
     setLocalLeagues((prev) => {
       const current = Array.isArray(prev) ? prev : [];
-      if (current.includes(v)) {
-        return current.filter((x) => x !== v);
-      }
+      if (current.includes(v)) return current.filter((x) => x !== v);
       return [...current, v];
     });
   };
 
   return (
     <form onSubmit={handleSubmit}>
-      {/* Стили/структура как в ArchivePage: controls/control */}
       <section className="controls">
         <div className="control">
           <label>Лиги</label>
@@ -81,7 +78,14 @@ export function BoardFilters({
               Нет доступных лиг
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                marginTop: 6,
+              }}
+            >
               {normalizedLeagueOptions.map((l) => {
                 const val = String(l.value);
                 const checked = (localLeagues || []).includes(val);
@@ -114,20 +118,22 @@ export function BoardFilters({
           </div>
         </div>
 
-        <div className="control">
-          <label>Сезон</label>
-          <select
-            value={localSeason}
-            onChange={(e) => setLocalSeason(e.target.value)}
-          >
-            <option value="">По умолчанию</option>
-            {normalizedSeasonOptions.map((s) => (
-              <option key={String(s.value)} value={String(s.value)}>
-                {s.label ?? String(s.value)}
-              </option>
-            ))}
-          </select>
-        </div>
+        {showSeason && (
+          <div className="control">
+            <label>Сезон</label>
+            <select
+              value={localSeason}
+              onChange={(e) => setLocalSeason(e.target.value)}
+            >
+              <option value="">По умолчанию</option>
+              {normalizedSeasonOptions.map((s) => (
+                <option key={String(s.value)} value={String(s.value)}>
+                  {s.label ?? String(s.value)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="control" style={{ alignSelf: "end" }}>
           <label style={{ opacity: 0 }}>Действия</label>
