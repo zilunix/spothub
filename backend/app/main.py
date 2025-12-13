@@ -43,7 +43,8 @@ async def root() -> dict:
 # Основные маршруты с префиксом /api (см. sports_api.py)
 app.include_router(sports_router)
 
-# ==== Legacy-роуты для текущего фронтенда (/leagues, /matches) ====
+# ==== Legacy-роуты для текущего фронтенда (/leagues, /matches, /board) ====
+
 
 @app.get("/leagues", tags=["sports-legacy"])
 async def legacy_leagues(
@@ -71,9 +72,14 @@ async def legacy_matches(
         client=client,
     )
 
+
 @app.get("/board", tags=["sports-legacy"])
 async def legacy_board(
-     # ВАЖНО: передаём int, иначе Query-дефолты в handler сломают timedelta
+    # Эти параметры нужны, потому что ingress rewrite превращает внешний /api/board
+    # во внутренний /board. Поэтому legacy /board должен поддерживать те же query.
+    leagues: str | None = None,  # "bl1,bl2"
+    season: int | None = None,   # 2024
+    # окно (можно регулировать отдельно)
     days_back: int = 7,
     days_ahead: int = 7,
     client: OpenLigaDBClient = Depends(get_client),
@@ -83,6 +89,8 @@ async def legacy_board(
     Нужен из-за ingress rewrite: внешний /api/board превращается во внутренний /board.
     """
     return await get_board_handler(
+        leagues=leagues,
+        season=season,
         days_back=days_back,
         days_ahead=days_ahead,
         client=client,

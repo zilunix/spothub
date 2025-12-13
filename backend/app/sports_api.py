@@ -4,12 +4,6 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from typing import List
-from app.repositories.matches import list_archive_matches
-from app.schemas.match import ArchiveMatchesResponse
-
-from app.repositories.matches import list_archive_matches, get_archive_meta
-from app.schemas.match import ArchiveMatchesResponse, ArchiveMetaResponse
-
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -20,6 +14,9 @@ from app.db import get_db
 from app.openligadb_client import Match, OpenLigaDBClient
 from app.repositories.matches import bulk_upsert_matches_from_board
 from app.schemas.match import MatchSummary, MatchStatus, classify_match
+
+from app.repositories.matches import list_archive_matches, get_archive_meta
+from app.schemas.match import ArchiveMatchesResponse, ArchiveMetaResponse
 
 router = APIRouter(prefix="/api", tags=["sports"])
 
@@ -115,9 +112,18 @@ class BoardResponse(BaseModel):
 @router.get(
     "/board",
     response_model=BoardResponse,
-    summary="Сводка матчей по диапазону дат и лигам по умолчанию",
+    summary="Сводка матчей по диапазону дат и лигам",
 )
 async def get_board(
+    # НОВОЕ: поддержка query leagues/season
+    leagues: str | None = Query(
+        default=None,
+        description="Список лиг через запятую, например bl1,bl2",
+    ),
+    season: int | None = Query(
+        default=None,
+        description="Год сезона, например 2024",
+    ),
     days_back: int = Query(
         default=cfg.BOARD_DAYS_BACK,
         ge=0,
@@ -136,14 +142,18 @@ async def get_board(
     """
     Эндпоинт /board: live / upcoming / recent матчи.
 
-    Берём сезоны для лиг по умолчанию (DEFAULT_LEAGUES, DEFAULT_SEASON),
-    загружаем все матчи сезона, классифицируем и ПАРАЛЛЕЛЬНО
-    сохраняем их в базу данных.
+    Если leagues/season переданы — используем их.
+    Иначе берём DEFAULT_LEAGUES, DEFAULT_SEASON из config.
     """
     now = dt.datetime.now(dt.timezone.utc)
 
-    leagues = cfg.get_default_leagues_list()
-    season = cfg.DEFAULT_SEASON
+    # Разбор query leagues (CSV) или fallback на дефолты
+    leagues_list = (
+        [x.strip() for x in leagues.split(",") if x.strip()]
+        if leagues
+        else cfg.get_default_leagues_list()
+    )
+    season_year = season or cfg.DEFAULT_SEASON
 
     back = days_back
     ahead = days_ahead
@@ -153,10 +163,8 @@ async def get_board(
     recent: List[MatchSummary] = []
 
     try:
-        # Для каждой лиги тянем матчи сезона, классифицируем
-        # и сохраняем в БД
-        for lg in leagues:
-            raw_matches = await client.get_season_raw(lg, season)
+        for lg in leagues_list:
+            raw_matches = await client.get_season_raw(lg, season_year)
 
             league_summaries: List[MatchSummary] = []
             for rm in raw_matches:
@@ -172,14 +180,14 @@ async def get_board(
                         db=db,
                         league_shortcut=lg,
                         league_name=lg,  # пока shortcut как name
-                        season_year=season,
+                        season_year=season_year,
                         matches=[m.model_dump(mode="json") for m in league_summaries],
                     )
             except Exception as db_exc:
                 logger.exception(
                     "Ошибка при сохранении матчей лиги %s сезона %s в БД: %s",
                     lg,
-                    season,
+                    season_year,
                     db_exc,
                 )
 
@@ -213,7 +221,7 @@ async def get_board(
     return BoardResponse(
         date_from=date_from,
         date_to=date_to,
-        leagues=leagues,
+        leagues=leagues_list,
         recent=recent,
         live=live,
         upcoming=upcoming,
@@ -420,6 +428,7 @@ async def admin_sync_season(
         "synced": len(summaries),
     }
 
+
 @router.get(
     "/archive",
     response_model=ArchiveMatchesResponse,
@@ -446,6 +455,7 @@ def get_archive(
         page_size=page_size,
     )
     return ArchiveMatchesResponse(page=page, page_size=page_size, total=total, items=items)
+
 
 @router.get(
     "/archive/meta",
