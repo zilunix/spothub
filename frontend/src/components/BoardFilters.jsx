@@ -1,7 +1,28 @@
 // src/components/BoardFilters.jsx
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-export function BoardFilters({ valueLeagues, valueSeason, onChange }) {
+function uniqStrings(arr) {
+  const out = [];
+  const seen = new Set();
+  for (const x of Array.isArray(arr) ? arr : []) {
+    const s = String(x || "").trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+export function BoardFilters({
+  valueLeagues,
+  valueSeason,
+  onChange,
+  onReset,
+
+  // опции для UI
+  leagueOptions = [], // [{value,label}]
+  seasonOptions = [], // [{value,label}]
+}) {
   const [localLeagues, setLocalLeagues] = useState(valueLeagues || []);
   const [localSeason, setLocalSeason] = useState(valueSeason || "");
 
@@ -13,49 +34,87 @@ export function BoardFilters({ valueLeagues, valueSeason, onChange }) {
     setLocalSeason(valueSeason || "");
   }, [valueSeason]);
 
+  const normalizedLeagueOptions = useMemo(() => {
+    // поддерживаем передачу простых строк
+    const base =
+      leagueOptions.length > 0
+        ? leagueOptions
+        : uniqStrings(valueLeagues).map((x) => ({ value: x, label: x }));
+    return base.filter((x) => x?.value);
+  }, [leagueOptions, valueLeagues]);
+
+  const normalizedSeasonOptions = useMemo(() => {
+    const base = seasonOptions.length > 0 ? seasonOptions : [];
+    return base.filter((x) => x?.value !== undefined && x?.value !== null);
+  }, [seasonOptions]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    onChange({
+    onChange?.({
       leagues: localLeagues,
       season: localSeason || undefined,
     });
   };
 
-  const handleLeaguesChange = (e) => {
-    const parts = e.target.value
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
-    setLocalLeagues(parts);
+  const handleLeaguesSelect = (e) => {
+    const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+    setLocalLeagues(selected);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="board-filters">
-      <div>
-        <label>
-          Лиги (через запятую):
-          <input
-            type="text"
-            value={localLeagues.join(", ")}
-            onChange={handleLeaguesChange}
-            placeholder="например: bl1, bl2"
-          />
-        </label>
-      </div>
+    <form onSubmit={handleSubmit}>
+      {/* Стили/структура как в ArchivePage: controls/control */}
+      <section className="controls">
+        <div className="control">
+          <label>Лиги</label>
+          <select
+            multiple
+            value={localLeagues}
+            onChange={handleLeaguesSelect}
+            size={Math.min(6, Math.max(2, normalizedLeagueOptions.length))}
+          >
+            {normalizedLeagueOptions.length === 0 ? (
+              <option value="" disabled>
+                Нет доступных лиг
+              </option>
+            ) : (
+              normalizedLeagueOptions.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label ?? l.value}
+                </option>
+              ))
+            )}
+          </select>
+          <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
+            Выбрано: {localLeagues.length || 0}
+          </div>
+        </div>
 
-      <div>
-        <label>
-          Сезон:
-          <input
-            type="number"
+        <div className="control">
+          <label>Сезон</label>
+          <select
             value={localSeason}
             onChange={(e) => setLocalSeason(e.target.value)}
-            placeholder="2024"
-          />
-        </label>
-      </div>
+          >
+            <option value="">По умолчанию</option>
+            {normalizedSeasonOptions.map((s) => (
+              <option key={String(s.value)} value={String(s.value)}>
+                {s.label ?? String(s.value)}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <button type="submit">Применить</button>
+        <div className="control" style={{ alignSelf: "end" }}>
+          <label style={{ opacity: 0 }}>Действия</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="submit">Применить</button>
+            <button type="button" onClick={onReset}>
+              Сбросить
+            </button>
+          </div>
+        </div>
+      </section>
     </form>
   );
 }

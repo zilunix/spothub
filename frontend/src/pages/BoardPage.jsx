@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchBoard } from "../api";
 import { BoardFilters } from "../components/BoardFilters";
 import { LiveMatchesSection } from "../components/LiveMatchesSection";
@@ -9,7 +9,7 @@ const DEFAULT_REFRESH_SECONDS = 30;
 
 function normalizeDefaultLeagues(defaultLeagues) {
   if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
-    return defaultLeagues;
+    return defaultLeagues.map((x) => String(x).trim()).filter(Boolean);
   }
   return ["bl1"];
 }
@@ -42,11 +42,14 @@ export function BoardPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const initialLeagues = normalizeDefaultLeagues(defaultLeagues);
+  const initialLeagues = useMemo(
+    () => normalizeDefaultLeagues(defaultLeagues),
+    [defaultLeagues]
+  );
 
   const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
 
-  // Важно: сезон по умолчанию берём из runtime config (dev сейчас 2025)
+  // Сезон по умолчанию берём из runtime config (dev сейчас 2025)
   const [selectedSeason, setSelectedSeason] = useState(() =>
     defaultSeason ? String(defaultSeason) : ""
   );
@@ -134,6 +137,19 @@ export function BoardPage({
     setDaysAhead(clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 }));
   };
 
+  const leagueOptions = useMemo(() => {
+    const leagues = normalizeDefaultLeagues(defaultLeagues);
+    return leagues.map((x) => ({ value: x, label: x }));
+  }, [defaultLeagues]);
+
+  const seasonOptions = useMemo(() => {
+    const base = defaultSeason ? Number(defaultSeason) : null;
+    if (!base || !Number.isFinite(base)) return [];
+    const years = [];
+    for (let y = base + 1; y >= base - 8; y -= 1) years.push(y);
+    return years.map((y) => ({ value: String(y), label: String(y) }));
+  }, [defaultSeason]);
+
   const isEmpty =
     !loading &&
     !error &&
@@ -149,6 +165,9 @@ export function BoardPage({
         valueLeagues={selectedLeagues}
         valueSeason={selectedSeason}
         onChange={handleFiltersChange}
+        onReset={handleResetDefaults}
+        leagueOptions={leagueOptions}
+        seasonOptions={seasonOptions}
       />
 
       <div className="card" style={{ marginTop: 12 }}>
@@ -201,12 +220,6 @@ export function BoardPage({
                 ? board.leagues.join(", ")
                 : "—"}
             </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "flex-end" }}>
-            <button type="button" className="tab" onClick={handleResetDefaults}>
-              Сбросить
-            </button>
           </div>
         </div>
 
