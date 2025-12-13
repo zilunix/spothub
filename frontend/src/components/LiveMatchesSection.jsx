@@ -2,15 +2,15 @@
 import React from "react";
 import { MatchesTable } from "./MatchesTable";
 
-export function LiveMatchesSection({ matches }) {
+export function LiveMatchesSection({ matches, onMatchClick }) {
   return (
-    <section>
-      <h2>Матчи в прямом эфире</h2>
-      {(!matches || matches.length === 0) ? (
-        <p>Сейчас нет матчей в прямом эфире.</p>
-      ) : (
-        <MatchesTable matches={matches} />
-      )}
+    <section style={{ marginTop: 16 }}>
+      <h3>Live</h3>
+      <MatchesTable
+        matches={matches}
+        onMatchClick={onMatchClick}
+        emptyText="Нет live-матчей."
+      />
     </section>
   );
 }
