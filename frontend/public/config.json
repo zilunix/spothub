@@ -1,0 +1,8 @@
+{
+  "apiBase": "/api",
+  "defaultLeagues": ["bl1", "bl2"],
+  "defaultSeason": 2025,
+  "defaultDaysBack": 7,
+  "defaultDaysAhead": 7,
+  "refreshSeconds": 60
+}
