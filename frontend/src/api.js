@@ -1,7 +1,6 @@
 // src/api.js
 
-let API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "/api";
+let API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "/api";
 
 /**
  * Установить базовый URL API (если нужно переопределить вручную).
@@ -21,7 +20,7 @@ export async function apiRequest(path, params = {}) {
   const url = new URL(API_BASE + path, window.location.origin);
 
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
+    if (value !== undefined && value !== null && value !== "") {
       url.searchParams.set(String(key), String(value));
     }
   });
@@ -51,18 +50,33 @@ export function fetchMatches(league, dateStr) {
 /* ==== Новый API для доски (board) ==== */
 
 /**
- * Получить объект { live, upcoming, recent }
+ * Получить объект:
+ * {
+ *   date_from, date_to, leagues,
+ *   live, upcoming, recent
+ * }
+ *
  * leagues: массив строк (["bl1", "bl2"]), опционально
- * season: номер сезона, опционально
+ * season: номер сезона (например 2024), опционально
+ * daysBack/daysAhead: окно доски (0..30), опционально
  */
-export function fetchBoard({ leagues, season } = {}) {
+export function fetchBoard({ leagues, season, daysBack, daysAhead } = {}) {
   const params = {};
+
   if (Array.isArray(leagues) && leagues.length > 0) {
     params.leagues = leagues.join(",");
   }
   if (season) {
     params.season = season;
   }
+
+  if (typeof daysBack === "number") {
+    params.days_back = daysBack;
+  }
+  if (typeof daysAhead === "number") {
+    params.days_ahead = daysAhead;
+  }
+
   return apiRequest("/board", params);
 }
 

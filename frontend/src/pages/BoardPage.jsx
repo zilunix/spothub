@@ -14,8 +14,20 @@ function normalizeDefaultLeagues(defaultLeagues) {
   return ["bl1"];
 }
 
+function clampInt(value, { min, max, fallback }) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.trunc(n);
+  if (i < min) return min;
+  if (i > max) return max;
+  return i;
+}
+
 export function BoardPage({ defaultLeagues }) {
   const [board, setBoard] = useState({
+    date_from: null,
+    date_to: null,
+    leagues: [],
     live: [],
     upcoming: [],
     recent: [],
@@ -27,7 +39,11 @@ export function BoardPage({ defaultLeagues }) {
   const initialLeagues = normalizeDefaultLeagues(defaultLeagues);
 
   const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
-  const [selectedSeason, setSelectedSeason] = useState("");
+  const [selectedSeason, setSelectedSeason] = useState(""); // строка для UI, в запрос уйдёт как число/undefined
+
+  // Окно доски (можно менять в UI)
+  const [daysBack, setDaysBack] = useState(7);
+  const [daysAhead, setDaysAhead] = useState(7);
 
   const intervalRef = useRef(null);
 
@@ -37,7 +53,11 @@ export function BoardPage({ defaultLeagues }) {
     try {
       setError(null);
       const data = await fetchBoard(params);
+
       setBoard({
+        date_from: data.date_from || null,
+        date_to: data.date_to || null,
+        leagues: data.leagues || [],
         live: data.live || [],
         upcoming: data.upcoming || [],
         recent: data.recent || [],
@@ -53,7 +73,9 @@ export function BoardPage({ defaultLeagues }) {
   useEffect(() => {
     const params = {
       leagues: selectedLeagues,
-      season: selectedSeason || undefined,
+      season: selectedSeason ? Number(selectedSeason) : undefined,
+      daysBack,
+      daysAhead,
     };
 
     loadBoard(params, { showLoader: true });
@@ -67,7 +89,7 @@ export function BoardPage({ defaultLeagues }) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [selectedLeagues, selectedSeason]);
+  }, [selectedLeagues, selectedSeason, daysBack, daysAhead]);
 
   const handleFiltersChange = ({ leagues, season }) => {
     const fallback = normalizeDefaultLeagues(defaultLeagues);
@@ -78,18 +100,90 @@ export function BoardPage({ defaultLeagues }) {
     setSelectedSeason(season || "");
   };
 
+  const isEmpty =
+    !loading &&
+    !error &&
+    (board.live?.length ?? 0) === 0 &&
+    (board.upcoming?.length ?? 0) === 0 &&
+    (board.recent?.length ?? 0) === 0;
+
   return (
     <div className="board-page">
       <h2>Спортивная доска</h2>
 
+      {/* Фильтры лиг/сезона */}
       <BoardFilters
         valueLeagues={selectedLeagues}
         valueSeason={selectedSeason}
         onChange={handleFiltersChange}
       />
 
+      {/* Управление окном (days_back/days_ahead) */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ opacity: 0.8 }}>Дней назад</span>
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={daysBack}
+              onChange={(e) =>
+                setDaysBack(
+                  clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
+                )
+              }
+              style={{ width: 140 }}
+            />
+          </label>
+
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ opacity: 0.8 }}>Дней вперёд</span>
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={daysAhead}
+              onChange={(e) =>
+                setDaysAhead(
+                  clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
+                )
+              }
+              style={{ width: 140 }}
+            />
+          </label>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ opacity: 0.8 }}>Диапазон</span>
+            <div style={{ paddingTop: 10 }}>
+              {board.date_from && board.date_to
+                ? `${board.date_from} — ${board.date_to}`
+                : "—"}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ opacity: 0.8 }}>Лиги (факт из API)</span>
+            <div style={{ paddingTop: 10 }}>
+              {Array.isArray(board.leagues) && board.leagues.length > 0
+                ? board.leagues.join(", ")
+                : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {loading && <p>Загрузка...</p>}
       {error && <p style={{ color: "red" }}>Ошибка: {error}</p>}
+
+      {isEmpty && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <p style={{ margin: 0 }}>
+            Матчей не найдено в выбранном окне дат. Попробуй увеличить диапазон
+            “Дней назад/вперёд” или сменить сезон.
+          </p>
+        </div>
+      )}
 
       <LiveMatchesSection matches={board.live} />
       <UpcomingMatchesSection matches={board.upcoming} />
