@@ -1,4 +1,3 @@
-// frontend/src/pages/BoardPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchBoard } from "../api";
 import { BoardFilters } from "../components/BoardFilters";
@@ -10,9 +9,7 @@ const DEFAULT_REFRESH_SECONDS = 30;
 
 function normalizeDefaultLeagues(defaultLeagues) {
   if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
-    return defaultLeagues
-      .map((x) => String(x).trim())
-      .filter(Boolean);
+    return defaultLeagues.map((x) => String(x).trim()).filter(Boolean);
   }
   return ["bl1"];
 }
@@ -204,12 +201,22 @@ export function BoardPage({
           />
         </div>
 
-        <div className="control">
-          <label>Диапазон</label>
-          <div style={{ paddingTop: 10 }}>
-            {board.date_from && board.date_to
-              ? `${board.date_from} — ${board.date_to}`
-              : "—"}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ opacity: 0.8 }}>Диапазон</span>
+            <div style={{ paddingTop: 10 }}>
+              {board.date_from && board.date_to
+                ? `${board.date_from} — ${board.date_to}`
+                : "—"}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ opacity: 0.8 }}>Лиги (факт из API)</span>
+            <div style={{ paddingTop: 10 }}>
+              {Array.isArray(board.leagues) && board.leagues.length > 0
+                ? board.leagues.join(", ")
+                : "—"}
+            </div>
           </div>
         </div>
 

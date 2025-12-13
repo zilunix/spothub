@@ -1,4 +1,4 @@
-// frontend/src/components/BoardFilters.jsx
+// src/components/BoardFilters.jsx
 import React, { useEffect, useMemo, useState } from "react";
 
 function uniqStrings(arr) {
@@ -20,8 +20,8 @@ export function BoardFilters({
   onReset,
 
   // опции для UI
-  leagueOptions = [], // [{value,label}] или []
-  seasonOptions = [], // [{value,label}] или []
+  leagueOptions = [], // [{value,label}]
+  seasonOptions = [], // [{value,label}]
 }) {
   const [localLeagues, setLocalLeagues] = useState(valueLeagues || []);
   const [localSeason, setLocalSeason] = useState(valueSeason || "");
@@ -63,6 +63,7 @@ export function BoardFilters({
 
   return (
     <form onSubmit={handleSubmit}>
+      {/* Стили/структура как в ArchivePage: controls/control */}
       <section className="controls">
         <div className="control">
           <label>Лиги</label>
