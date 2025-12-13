@@ -30,6 +30,23 @@ export function BoardPage({
   defaultDaysAhead,
   refreshSeconds,
 }) {
+  const initialLeagues = useMemo(
+    () => normalizeDefaultLeagues(defaultLeagues),
+    [defaultLeagues]
+  );
+
+  const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
+  const [selectedSeason, setSelectedSeason] = useState(() =>
+    defaultSeason ? String(defaultSeason) : ""
+  );
+
+  const [daysBack, setDaysBack] = useState(() =>
+    clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 })
+  );
+  const [daysAhead, setDaysAhead] = useState(() =>
+    clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 })
+  );
+
   const [board, setBoard] = useState({
     date_from: null,
     date_to: null,
@@ -42,31 +59,33 @@ export function BoardPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const initialLeagues = useMemo(
-    () => normalizeDefaultLeagues(defaultLeagues),
-    [defaultLeagues]
-  );
-
-  const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
-
-  // Сезон по умолчанию берём из runtime config (dev сейчас 2025)
-  const [selectedSeason, setSelectedSeason] = useState(() =>
-    defaultSeason ? String(defaultSeason) : ""
-  );
-
-  // Окно доски
-  const [daysBack, setDaysBack] = useState(() =>
-    clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 })
-  );
-  const [daysAhead, setDaysAhead] = useState(() =>
-    clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 })
-  );
-
   const intervalRef = useRef(null);
+
+  const leagueOptions = useMemo(() => {
+    const leagues = normalizeDefaultLeagues(defaultLeagues);
+    return leagues.map((x) => ({ value: x, label: x }));
+  }, [defaultLeagues]);
+
+  const seasonOptions = useMemo(() => {
+    const base = defaultSeason ? Number(defaultSeason) : null;
+    if (!base || !Number.isFinite(base)) return [];
+    const years = [];
+    for (let y = base + 1; y >= base - 8; y -= 1) years.push(y);
+    return years.map((y) => ({ value: String(y), label: String(y) }));
+  }, [defaultSeason]);
+
+  const refreshMs =
+    Math.max(
+      0,
+      clampInt(refreshSeconds, {
+        min: 0,
+        max: 3600,
+        fallback: DEFAULT_REFRESH_SECONDS,
+      })
+    ) * 1000;
 
   const loadBoard = async (params, { showLoader = false } = {}) => {
     if (showLoader) setLoading(true);
-
     try {
       setError(null);
       const data = await fetchBoard(params);
@@ -81,21 +100,11 @@ export function BoardPage({
       });
     } catch (e) {
       console.error("Failed to fetch board:", e);
-      setError(e.message || "Ошибка загрузки данных.");
+      setError(e?.message || "Ошибка загрузки данных.");
     } finally {
       if (showLoader) setLoading(false);
     }
   };
-
-  const refreshMs =
-    Math.max(
-      0,
-      clampInt(refreshSeconds, {
-        min: 0,
-        max: 3600,
-        fallback: DEFAULT_REFRESH_SECONDS,
-      })
-    ) * 1000;
 
   useEffect(() => {
     const params = {
@@ -125,7 +134,6 @@ export function BoardPage({
       Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
 
     setSelectedLeagues(nextLeagues);
-    // если сезон не задан, оставляем пусто -> backend возьмёт дефолт
     setSelectedSeason(season ? String(season) : "");
   };
 
@@ -135,19 +143,6 @@ export function BoardPage({
     setDaysBack(clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 }));
     setDaysAhead(clampInt(defaultDaysAhead, { min: 0, max: 30, fallback: 7 }));
   };
-
-  const leagueOptions = useMemo(() => {
-    const leagues = normalizeDefaultLeagues(defaultLeagues);
-    return leagues.map((x) => ({ value: x, label: x }));
-  }, [defaultLeagues]);
-
-  const seasonOptions = useMemo(() => {
-    const base = defaultSeason ? Number(defaultSeason) : null;
-    if (!base || !Number.isFinite(base)) return [];
-    const years = [];
-    for (let y = base + 1; y >= base - 8; y -= 1) years.push(y);
-    return years.map((y) => ({ value: String(y), label: String(y) }));
-  }, [defaultSeason]);
 
   const isEmpty =
     !loading &&
@@ -169,7 +164,6 @@ export function BoardPage({
         seasonOptions={seasonOptions}
       />
 
-      {/* Окно по датам — визуально как в архиве (controls/control) */}
       <section className="controls" style={{ marginTop: 12 }}>
         <div className="control">
           <label>Дней назад</label>
@@ -201,22 +195,12 @@ export function BoardPage({
           />
         </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ opacity: 0.8 }}>Диапазон</span>
-            <div style={{ paddingTop: 10 }}>
-              {board.date_from && board.date_to
-                ? `${board.date_from} — ${board.date_to}`
-                : "—"}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ opacity: 0.8 }}>Лиги (факт из API)</span>
-            <div style={{ paddingTop: 10 }}>
-              {Array.isArray(board.leagues) && board.leagues.length > 0
-                ? board.leagues.join(", ")
-                : "—"}
-            </div>
+        <div className="control">
+          <label>Диапазон</label>
+          <div style={{ paddingTop: 10 }}>
+            {board.date_from && board.date_to
+              ? `${board.date_from} — ${board.date_to}`
+              : "—"}
           </div>
         </div>
 
@@ -255,3 +239,5 @@ export function BoardPage({
     </div>
   );
 }
+
+export default BoardPage;
