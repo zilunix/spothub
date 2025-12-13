@@ -13,19 +13,44 @@ function uniqStrings(arr) {
   return out;
 }
 
+function toIntOrEmpty(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "";
+  return String(Math.trunc(n));
+}
+
+function clampInt(n, { min = 0, max = 365 } = {}) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return null;
+  const i = Math.trunc(x);
+  return Math.min(max, Math.max(min, i));
+}
+
 export function BoardFilters({
   valueLeagues,
   valueSeason,
+
+  // optional (если вы используете дни диапазона на Board)
+  valueDaysBack,
+  valueDaysAhead,
+
   onChange,
   onReset,
 
+  // опции для UI
   leagueOptions = [], // [{value,label}]
   seasonOptions = [], // [{value,label}]
 
-  showSeason = true,
+  // optional UI flags
+  showDaysRange = true,
 }) {
   const [localLeagues, setLocalLeagues] = useState(valueLeagues || []);
   const [localSeason, setLocalSeason] = useState(valueSeason || "");
+
+  // храню как строки (для controlled input)
+  const [localDaysBack, setLocalDaysBack] = useState(toIntOrEmpty(valueDaysBack));
+  const [localDaysAhead, setLocalDaysAhead] = useState(toIntOrEmpty(valueDaysAhead));
 
   useEffect(() => {
     setLocalLeagues(valueLeagues || []);
@@ -35,7 +60,16 @@ export function BoardFilters({
     setLocalSeason(valueSeason || "");
   }, [valueSeason]);
 
+  useEffect(() => {
+    setLocalDaysBack(toIntOrEmpty(valueDaysBack));
+  }, [valueDaysBack]);
+
+  useEffect(() => {
+    setLocalDaysAhead(toIntOrEmpty(valueDaysAhead));
+  }, [valueDaysAhead]);
+
   const normalizedLeagueOptions = useMemo(() => {
+    // поддерживаем передачу простых строк
     const base =
       leagueOptions.length > 0
         ? leagueOptions
@@ -50,89 +84,98 @@ export function BoardFilters({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    const daysBack = localDaysBack === "" ? undefined : clampInt(localDaysBack, { min: 0, max: 365 });
+    const daysAhead = localDaysAhead === "" ? undefined : clampInt(localDaysAhead, { min: 0, max: 365 });
+
     onChange?.({
       leagues: localLeagues,
-      season: showSeason ? (localSeason || undefined) : undefined,
+      season: localSeason || undefined,
+      // не навязываем — отдаём только если включено/задано
+      ...(showDaysRange ? { daysBack, daysAhead } : {}),
     });
   };
 
-  const toggleLeague = (leagueValue) => {
-    const v = String(leagueValue || "").trim();
-    if (!v) return;
-
-    setLocalLeagues((prev) => {
-      const current = Array.isArray(prev) ? prev : [];
-      if (current.includes(v)) return current.filter((x) => x !== v);
-      return [...current, v];
-    });
+  const handleLeaguesSelect = (e) => {
+    const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+    setLocalLeagues(selected);
   };
 
   return (
     <form onSubmit={handleSubmit}>
+      {/* структура как в ArchivePage: controls/control */}
       <section className="controls">
         <div className="control">
           <label>Лиги</label>
-
-          {normalizedLeagueOptions.length === 0 ? (
-            <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
-              Нет доступных лиг
-            </div>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                marginTop: 6,
-              }}
-            >
-              {normalizedLeagueOptions.map((l) => {
-                const val = String(l.value);
-                const checked = (localLeagues || []).includes(val);
-
-                return (
-                  <label
-                    key={val}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      cursor: "pointer",
-                      userSelect: "none",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleLeague(val)}
-                    />
-                    <span>{l.label ?? val}</span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-
+          <select
+            multiple
+            value={localLeagues}
+            onChange={handleLeaguesSelect}
+            size={Math.min(6, Math.max(2, normalizedLeagueOptions.length))}
+          >
+            {normalizedLeagueOptions.length === 0 ? (
+              <option value="" disabled>
+                Нет доступных лиг
+              </option>
+            ) : (
+              normalizedLeagueOptions.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label ?? l.value}
+                </option>
+              ))
+            )}
+          </select>
           <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
             Выбрано: {localLeagues.length || 0}
           </div>
         </div>
 
-        {showSeason && (
-          <div className="control">
-            <label>Сезон</label>
-            <select
-              value={localSeason}
-              onChange={(e) => setLocalSeason(e.target.value)}
-            >
-              <option value="">По умолчанию</option>
-              {normalizedSeasonOptions.map((s) => (
-                <option key={String(s.value)} value={String(s.value)}>
-                  {s.label ?? String(s.value)}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="control">
+          <label>Сезон</label>
+          <select value={localSeason} onChange={(e) => setLocalSeason(e.target.value)}>
+            <option value="">По умолчанию</option>
+            {normalizedSeasonOptions.map((s) => (
+              <option key={String(s.value)} value={String(s.value)}>
+                {s.label ?? String(s.value)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {showDaysRange && (
+          <>
+            <div className="control">
+              <label>Дней назад</label>
+              <input
+                type="number"
+                min={0}
+                max={365}
+                step={1}
+                value={localDaysBack}
+                onChange={(e) => setLocalDaysBack(e.target.value)}
+                placeholder="например 7"
+              />
+              <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
+                0–365 (пусто = по умолчанию)
+              </div>
+            </div>
+
+            <div className="control">
+              <label>Дней вперёд</label>
+              <input
+                type="number"
+                min={0}
+                max={365}
+                step={1}
+                value={localDaysAhead}
+                onChange={(e) => setLocalDaysAhead(e.target.value)}
+                placeholder="например 7"
+              />
+              <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
+                0–365 (пусто = по умолчанию)
+              </div>
+            </div>
+          </>
         )}
 
         <div className="control" style={{ alignSelf: "end" }}>

@@ -2,15 +2,15 @@
 import React from "react";
 import { MatchesTable } from "./MatchesTable";
 
-export function UpcomingMatchesSection({ matches }) {
+export function UpcomingMatchesSection({ matches, onMatchClick }) {
   return (
-    <section>
-      <h2>Ближайшие матчи</h2>
-      {(!matches || matches.length === 0) ? (
-        <p>Ближайших матчей нет.</p>
-      ) : (
-        <MatchesTable matches={matches} />
-      )}
+    <section style={{ marginTop: 16 }}>
+      <h3>Upcoming</h3>
+      <MatchesTable
+        matches={matches}
+        onMatchClick={onMatchClick}
+        emptyText="Нет upcoming-матчей."
+      />
     </section>
   );
 }

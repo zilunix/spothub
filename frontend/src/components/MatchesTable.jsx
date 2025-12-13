@@ -28,9 +28,21 @@ function formatStatus(status) {
   }
 }
 
-export function MatchesTable({ matches }) {
+function formatScore(m) {
+  return m.score_team1 != null && m.score_team2 != null
+    ? `${m.score_team1} : ${m.score_team2}`
+    : "-";
+}
+
+export function MatchesTable({
+  matches,
+  onMatchClick, // (match) => void
+  emptyText = "Нет матчей для отображения.",
+}) {
+  const clickable = typeof onMatchClick === "function";
+
   if (!matches || matches.length === 0) {
-    return <div>Нет матчей для отображения.</div>;
+    return <div>{emptyText}</div>;
   }
 
   return (
@@ -47,23 +59,38 @@ export function MatchesTable({ matches }) {
           <th>Статус</th>
         </tr>
       </thead>
+
       <tbody>
-        {matches.map((m) => (
-          <tr key={m.id}>
-            <td>{m.league_shortcut}</td>
-            <td>{m.league_season}</td>
-            <td>{m.group_order_id}</td>
-            <td>{m.team1_name}</td>
-            <td>{m.team2_name}</td>
-            <td>
-              {m.score_team1 != null && m.score_team2 != null
-                ? `${m.score_team1} : ${m.score_team2}`
-                : "-"}
-            </td>
-            <td>{formatKickoff(m.kickoff_utc)}</td>
-            <td>{formatStatus(m.status)}</td>
-          </tr>
-        ))}
+        {matches.map((m) => {
+          const rowProps = clickable
+            ? {
+                role: "button",
+                tabIndex: 0,
+                title: "Открыть детали матча",
+                onClick: () => onMatchClick(m),
+                onKeyDown: (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onMatchClick(m);
+                  }
+                },
+                style: { cursor: "pointer" },
+              }
+            : {};
+
+          return (
+            <tr key={m.id} {...rowProps}>
+              <td>{m.league_shortcut}</td>
+              <td>{m.league_season}</td>
+              <td>{m.group_order_id}</td>
+              <td>{m.team1_name}</td>
+              <td>{m.team2_name}</td>
+              <td>{formatScore(m)}</td>
+              <td>{formatKickoff(m.kickoff_utc)}</td>
+              <td>{formatStatus(m.status)}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

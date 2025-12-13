@@ -1,9 +1,11 @@
+// src/pages/BoardPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchBoard } from "../api";
 import { BoardFilters } from "../components/BoardFilters";
 import { LiveMatchesSection } from "../components/LiveMatchesSection";
 import { UpcomingMatchesSection } from "../components/UpcomingMatchesSection";
 import { RecentMatchesSection } from "../components/RecentMatchesSection";
+import MatchDetailsModal from "../components/MatchDetailsModal";
 
 const DEFAULT_REFRESH_SECONDS = 30;
 
@@ -54,6 +56,10 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // modal state
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const intervalRef = useRef(null);
 
@@ -122,6 +128,16 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     setSelectedLeagues(initialLeagues);
   };
 
+  const handleMatchClick = (match) => {
+    setSelectedMatch(match);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedMatch(null);
+  };
+
   const isEmpty =
     !loading &&
     !error &&
@@ -186,9 +202,15 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
         </div>
       )}
 
-      <LiveMatchesSection matches={board.live} />
-      <UpcomingMatchesSection matches={board.upcoming} />
-      <RecentMatchesSection matches={board.recent} />
+      <LiveMatchesSection matches={board.live} onMatchClick={handleMatchClick} />
+      <UpcomingMatchesSection matches={board.upcoming} onMatchClick={handleMatchClick} />
+      <RecentMatchesSection matches={board.recent} onMatchClick={handleMatchClick} />
+
+      <MatchDetailsModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        match={selectedMatch}
+      />
     </div>
   );
 }
