@@ -1,3 +1,4 @@
+// frontend/src/pages/BoardPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchBoard } from "../api";
 import { BoardFilters } from "../components/BoardFilters";
@@ -9,7 +10,9 @@ const DEFAULT_REFRESH_SECONDS = 30;
 
 function normalizeDefaultLeagues(defaultLeagues) {
   if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
-    return defaultLeagues.map((x) => String(x).trim()).filter(Boolean);
+    return defaultLeagues
+      .map((x) => String(x).trim())
+      .filter(Boolean);
   }
   return ["bl1"];
 }
@@ -54,7 +57,7 @@ export function BoardPage({
     defaultSeason ? String(defaultSeason) : ""
   );
 
-  // Окно доски по умолчанию тоже можно брать из runtime config
+  // Окно доски
   const [daysBack, setDaysBack] = useState(() =>
     clampInt(defaultDaysBack, { min: 0, max: 30, fallback: 7 })
   );
@@ -125,8 +128,7 @@ export function BoardPage({
       Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
 
     setSelectedLeagues(nextLeagues);
-
-    // если сезон не задан, оставляем пусто -> backend возьмёт дефолт (2025)
+    // если сезон не задан, оставляем пусто -> backend возьмёт дефолт
     setSelectedSeason(season ? String(season) : "");
   };
 
@@ -170,60 +172,59 @@ export function BoardPage({
         seasonOptions={seasonOptions}
       />
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ opacity: 0.8 }}>Дней назад</span>
-            <input
-              type="number"
-              min={0}
-              max={30}
-              value={daysBack}
-              onChange={(e) =>
-                setDaysBack(
-                  clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
-                )
-              }
-              style={{ width: 140 }}
-            />
-          </label>
+      {/* Окно по датам — визуально как в архиве (controls/control) */}
+      <section className="controls" style={{ marginTop: 12 }}>
+        <div className="control">
+          <label>Дней назад</label>
+          <input
+            type="number"
+            min={0}
+            max={30}
+            value={daysBack}
+            onChange={(e) =>
+              setDaysBack(
+                clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
+              )
+            }
+          />
+        </div>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ opacity: 0.8 }}>Дней вперёд</span>
-            <input
-              type="number"
-              min={0}
-              max={30}
-              value={daysAhead}
-              onChange={(e) =>
-                setDaysAhead(
-                  clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
-                )
-              }
-              style={{ width: 140 }}
-            />
-          </label>
+        <div className="control">
+          <label>Дней вперёд</label>
+          <input
+            type="number"
+            min={0}
+            max={30}
+            value={daysAhead}
+            onChange={(e) =>
+              setDaysAhead(
+                clampInt(e.target.value, { min: 0, max: 30, fallback: 7 })
+              )
+            }
+          />
+        </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ opacity: 0.8 }}>Диапазон</span>
-            <div style={{ paddingTop: 10 }}>
-              {board.date_from && board.date_to
-                ? `${board.date_from} — ${board.date_to}`
-                : "—"}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ opacity: 0.8 }}>Лиги (факт из API)</span>
-            <div style={{ paddingTop: 10 }}>
-              {Array.isArray(board.leagues) && board.leagues.length > 0
-                ? board.leagues.join(", ")
-                : "—"}
-            </div>
+        <div className="control">
+          <label>Диапазон</label>
+          <div style={{ paddingTop: 10 }}>
+            {board.date_from && board.date_to
+              ? `${board.date_from} — ${board.date_to}`
+              : "—"}
           </div>
         </div>
 
-        <p style={{ marginTop: 10, marginBottom: 0, opacity: 0.8 }}>
+        <div className="control">
+          <label>Лиги (факт из API)</label>
+          <div style={{ paddingTop: 10 }}>
+            {Array.isArray(board.leagues) && board.leagues.length > 0
+              ? board.leagues.join(", ")
+              : "—"}
+          </div>
+        </div>
+      </section>
+
+      <div className="card" style={{ marginTop: 12 }}>
+        <p style={{ margin: 0, opacity: 0.85 }}>
           Если выбрать сезон, который не соответствует текущим датам, доска будет
           пустой. Для “живых” матчей используйте актуальный сезон.
         </p>
