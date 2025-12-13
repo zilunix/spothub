@@ -35,7 +35,7 @@ export function BoardFilters({
   }, [valueSeason]);
 
   const normalizedLeagueOptions = useMemo(() => {
-    // поддерживаем передачу простых строк
+    // поддерживаем передачу простых строк (и fallback)
     const base =
       leagueOptions.length > 0
         ? leagueOptions
@@ -56,9 +56,17 @@ export function BoardFilters({
     });
   };
 
-  const handleLeaguesSelect = (e) => {
-    const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-    setLocalLeagues(selected);
+  const toggleLeague = (leagueValue) => {
+    const v = String(leagueValue || "").trim();
+    if (!v) return;
+
+    setLocalLeagues((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      if (current.includes(v)) {
+        return current.filter((x) => x !== v);
+      }
+      return [...current, v];
+    });
   };
 
   return (
@@ -67,24 +75,40 @@ export function BoardFilters({
       <section className="controls">
         <div className="control">
           <label>Лиги</label>
-          <select
-            multiple
-            value={localLeagues}
-            onChange={handleLeaguesSelect}
-            size={Math.min(6, Math.max(2, normalizedLeagueOptions.length))}
-          >
-            {normalizedLeagueOptions.length === 0 ? (
-              <option value="" disabled>
-                Нет доступных лиг
-              </option>
-            ) : (
-              normalizedLeagueOptions.map((l) => (
-                <option key={l.value} value={l.value}>
-                  {l.label ?? l.value}
-                </option>
-              ))
-            )}
-          </select>
+
+          {normalizedLeagueOptions.length === 0 ? (
+            <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
+              Нет доступных лиг
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+              {normalizedLeagueOptions.map((l) => {
+                const val = String(l.value);
+                const checked = (localLeagues || []).includes(val);
+
+                return (
+                  <label
+                    key={val}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleLeague(val)}
+                    />
+                    <span>{l.label ?? val}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
           <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
             Выбрано: {localLeagues.length || 0}
           </div>
