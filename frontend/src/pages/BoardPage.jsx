@@ -9,12 +9,17 @@ import MatchDetailsModal from "../components/MatchDetailsModal";
 
 const DEFAULT_REFRESH_SECONDS = 30;
 
-// “оперативное” окно для live/upcoming
+// Оперативное окно для live/upcoming
 const MAIN_DAYS_BACK = 1;
 const MAIN_DAYS_AHEAD = 2;
 
-// recent листаем неделями
-const WEEK_SIZE_DAYS = 7;
+// Recent: сколько туров показываем на одной странице
+const RECENT_ROUNDS_PER_PAGE = 3;
+
+// Recent: сколько дней истории тянуть
+// (поставил 365; если бэк отдаст 400 — сделаем fallback на 240)
+const RECENT_HISTORY_DAYS_PRIMARY = 365;
+const RECENT_HISTORY_DAYS_FALLBACK = 240;
 
 function normalizeDefaultLeagues(defaultLeagues) {
   if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
@@ -29,6 +34,25 @@ function uniq(arr) {
       (Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean)
     )
   );
+}
+
+function byKickoffDesc(a, b) {
+  const da = a?.kickoff_utc ? Date.parse(a.kickoff_utc) : 0;
+  const db = b?.kickoff_utc ? Date.parse(b.kickoff_utc) : 0;
+  return db - da;
+}
+
+function formatDateRangeFromMatches(matches) {
+  if (!matches || matches.length === 0) return "—";
+  const times = matches
+    .map((m) => (m?.kickoff_utc ? Date.parse(m.kickoff_utc) : null))
+    .filter((x) => Number.isFinite(x));
+  if (times.length === 0) return "—";
+  const min = new Date(Math.min(...times));
+  const max = new Date(Math.max(...times));
+  const fmt = (d) =>
+    d.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+  return `${fmt(min)} — ${fmt(max)}`;
 }
 
 export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
@@ -46,21 +70,21 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     return new Date().getFullYear();
   }, [defaultSeason]);
 
-  // live/upcoming + мета “main”
+  // main
   const [mainMeta, setMainMeta] = useState({ date_from: null, date_to: null, leagues: [] });
   const [live, setLive] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
 
-  // recent “страница”
-  const [recentWeekOffset, setRecentWeekOffset] = useState(0);
-  const [recentMeta, setRecentMeta] = useState({ date_from: null, date_to: null });
-  const [recent, setRecent] = useState([]);
+  // recent history + pagination by rounds
+  const [recentHistory, setRecentHistory] = useState([]); // все recent матчи из истории
+  const [recentRounds, setRecentRounds] = useState([]);   // уникальные group_order_id по убыванию
+  const [recentPageIndex, setRecentPageIndex] = useState(0);
 
   const [loadingMain, setLoadingMain] = useState(false);
   const [loadingRecent, setLoadingRecent] = useState(false);
   const [error, setError] = useState(null);
 
-  // modal state
+  // modal
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -102,45 +126,61 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     }
   };
 
-  const loadRecentWeek = async (weekOffset, { showLoader = false } = {}) => {
+  const loadRecentHistory = async ({ showLoader = false } = {}) => {
     if (showLoader) setLoadingRecent(true);
     try {
       setError(null);
 
-      const daysBack = (weekOffset + 1) * WEEK_SIZE_DAYS;
-      const daysAhead = weekOffset * WEEK_SIZE_DAYS;
+      // ВАЖНО: daysAhead=0, иначе диапазон будет “ползти вперёд” и раздуваться
+      const attempt = async (daysBack) => {
+        return fetchBoard({
+          leagues: selectedLeagues,
+          season,
+          daysBack,
+          daysAhead: 0,
+        });
+      };
 
-      const data = await fetchBoard({
-        leagues: selectedLeagues,
-        season,
-        daysBack,
-        daysAhead,
-      });
+      let data;
+      try {
+        data = await attempt(RECENT_HISTORY_DAYS_PRIMARY);
+      } catch (e) {
+        // fallback на случай, если бэк ограничивает days_back
+        data = await attempt(RECENT_HISTORY_DAYS_FALLBACK);
+      }
 
-      setRecentMeta({
-        date_from: data.date_from || null,
-        date_to: data.date_to || null,
-      });
-      setRecent(data.recent || []);
+      const list = Array.isArray(data.recent) ? [...data.recent].sort(byKickoffDesc) : [];
+      setRecentHistory(list);
+
+      const roundsSet = new Set();
+      for (const m of list) {
+        if (m?.group_order_id != null) roundsSet.add(Number(m.group_order_id));
+      }
+      const rounds = Array.from(roundsSet)
+        .filter((x) => Number.isFinite(x))
+        .sort((a, b) => b - a);
+
+      setRecentRounds(rounds);
     } catch (e) {
-      console.error("Failed to fetch recent week:", e);
-      setError(e?.message || "Ошибка загрузки данных.");
+      console.error("Failed to fetch recent history:", e);
+      setError(e?.message || "Ошибка загрузки recent.");
     } finally {
       if (showLoader) setLoadingRecent(false);
     }
   };
 
-  // при смене лиг/сезона — main + recent(0), и таймер только для main
+  // on leagues/season change: reload main + recent history; reset recent page index
   useEffect(() => {
-    setRecentWeekOffset(0);
+    setRecentPageIndex(0);
 
     (async () => {
       await Promise.all([
         loadMain({ showLoader: true }),
-        loadRecentWeek(0, { showLoader: true }),
+        loadRecentHistory({ showLoader: true }),
       ]);
     })();
 
+    // таймер автообновления только для live/upcoming
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (refreshMs > 0) {
       intervalRef.current = setInterval(() => {
@@ -154,16 +194,9 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLeagues, season, refreshMs]);
 
-  // листаем recent — отдельная загрузка
-  useEffect(() => {
-    loadRecentWeek(recentWeekOffset, { showLoader: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recentWeekOffset]);
-
   const handleFiltersChange = ({ leagues }) => {
     const fallback = normalizeDefaultLeagues(defaultLeagues);
-    const nextLeagues =
-      Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
+    const nextLeagues = Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
     setSelectedLeagues(nextLeagues);
   };
 
@@ -181,10 +214,44 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     setSelectedMatch(null);
   };
 
-  const recentRangeText =
-    recentMeta.date_from && recentMeta.date_to
-      ? `${recentMeta.date_from} — ${recentMeta.date_to}`
-      : "—";
+  // derive current page rounds (3 rounds)
+  const currentRoundIds = useMemo(() => {
+    const start = recentPageIndex * RECENT_ROUNDS_PER_PAGE;
+    const end = start + RECENT_ROUNDS_PER_PAGE;
+    return recentRounds.slice(start, end);
+  }, [recentRounds, recentPageIndex]);
+
+  const recentGroups = useMemo(() => {
+    if (!currentRoundIds.length) return [];
+    const idsSet = new Set(currentRoundIds);
+
+    const grouped = new Map();
+    for (const r of currentRoundIds) grouped.set(r, []);
+
+    for (const m of recentHistory) {
+      const r = Number(m?.group_order_id);
+      if (!idsSet.has(r)) continue;
+      grouped.get(r).push(m);
+    }
+
+    return currentRoundIds.map((r) => ({
+      round: r,
+      matches: grouped.get(r).sort(byKickoffDesc),
+    }));
+  }, [recentHistory, currentRoundIds]);
+
+  const flattenedRecentPageMatches = useMemo(
+    () => recentGroups.flatMap((g) => g.matches),
+    [recentGroups]
+  );
+
+  const recentRangeText = useMemo(
+    () => formatDateRangeFromMatches(flattenedRecentPageMatches),
+    [flattenedRecentPageMatches]
+  );
+
+  const hasNewer = recentPageIndex > 0;
+  const hasOlder = (recentPageIndex + 1) * RECENT_ROUNDS_PER_PAGE < recentRounds.length;
 
   const isEmpty =
     !loadingMain &&
@@ -192,7 +259,7 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     !error &&
     (live?.length ?? 0) === 0 &&
     (upcoming?.length ?? 0) === 0 &&
-    (recent?.length ?? 0) === 0;
+    flattenedRecentPageMatches.length === 0;
 
   return (
     <div className="board-page">
@@ -246,8 +313,8 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
       {isEmpty && (
         <div className="card" style={{ marginTop: 12 }}>
           <p style={{ margin: 0 }}>
-            Матчей не найдено. Попробуйте выбрать другие лиги или перейти на прошлую
-            неделю в блоке Recent.
+            Матчей не найдено. Попробуйте выбрать другие лиги или нажмите “Старее →”
+            в блоке Recent, если история не попала в первые туры.
           </p>
         </div>
       )}
@@ -256,13 +323,15 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
       <UpcomingMatchesSection matches={upcoming} onMatchClick={handleMatchClick} />
 
       <RecentMatchesSection
-        matches={recent}
+        groups={recentGroups}
         onMatchClick={handleMatchClick}
-        weekOffset={recentWeekOffset}
+        pageSizeRounds={RECENT_ROUNDS_PER_PAGE}
         rangeText={recentRangeText}
         isLoading={loadingRecent}
-        onPrevWeek={() => setRecentWeekOffset((w) => w + 1)} // старее
-        onNextWeek={() => setRecentWeekOffset((w) => Math.max(0, w - 1))} // ближе
+        hasNewer={hasNewer}
+        hasOlder={hasOlder}
+        onNewer={() => setRecentPageIndex((p) => Math.max(0, p - 1))}
+        onOlder={() => setRecentPageIndex((p) => (hasOlder ? p + 1 : p))}
       />
 
       <MatchDetailsModal isOpen={isModalOpen} onClose={closeModal} match={selectedMatch} />
