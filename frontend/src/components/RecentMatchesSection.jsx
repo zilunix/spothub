@@ -2,18 +2,30 @@ import React from "react";
 import { MatchesTable } from "./MatchesTable";
 
 /**
- * weekOffset: 0 = последние 7 дней, 1 = 7–14 дней назад, и т.д.
- * rangeText: строка вида "2025-12-23 — 2026-01-06" (или "-")
+ * groups: [{ round: number, matches: Match[] }]
  */
 export function RecentMatchesSection({
-  matches,
+  groups = [],
   onMatchClick,
-  weekOffset = 0,
+
+  pageSizeRounds = 3,
   rangeText = "—",
-  onPrevWeek,
-  onNextWeek,
+
+  hasNewer = false,
+  hasOlder = false,
+  onNewer,
+  onOlder,
+
   isLoading = false,
 }) {
+  const topRound = groups?.[0]?.round;
+  const bottomRound = groups?.[groups.length - 1]?.round;
+
+  const roundsLabel =
+    topRound != null && bottomRound != null
+      ? `Туры: ${topRound}–${bottomRound}`
+      : `Туры: —`;
+
   return (
     <section style={{ marginTop: 16 }}>
       <div
@@ -22,33 +34,54 @@ export function RecentMatchesSection({
           alignItems: "baseline",
           justifyContent: "space-between",
           gap: 12,
-          marginBottom: 6,
+          marginBottom: 10,
         }}
       >
         <div>
           <h3 style={{ marginBottom: 4 }}>Recent</h3>
           <div style={{ opacity: 0.75, fontSize: 12 }}>
-            Неделя: {weekOffset} • Диапазон: {rangeText}
+            {roundsLabel} • По {pageSizeRounds} тура • Диапазон: {rangeText}
             {isLoading ? " • обновление…" : ""}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={onNextWeek} disabled={weekOffset <= 0}>
+          <button type="button" onClick={onNewer} disabled={!hasNewer}>
             ← Ближе
           </button>
-          <button type="button" onClick={onPrevWeek}>
+          <button type="button" onClick={onOlder} disabled={!hasOlder}>
             Старее →
           </button>
         </div>
       </div>
 
-      <MatchesTable
-        matches={matches}
-        onMatchClick={onMatchClick}
-        emptyText="Нет recent-матчей."
-        variant="board"
-      />
+      {groups.length === 0 ? (
+        <div>Нет recent-матчей.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {groups.map((g) => (
+            <div key={g.round}>
+              <div
+                style={{
+                  opacity: 0.85,
+                  fontWeight: 600,
+                  marginBottom: 8,
+                  letterSpacing: 0.3,
+                }}
+              >
+                {"=".repeat(11)} {g.round} тур {"=".repeat(11)}
+              </div>
+
+              <MatchesTable
+                matches={g.matches}
+                onMatchClick={onMatchClick}
+                emptyText="Нет матчей в этом туре."
+                variant="board"
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
