@@ -1,4 +1,3 @@
-// src/components/UpcomingMatchesSection.jsx
 import React from "react";
 import { MatchesTable } from "./MatchesTable";
 
@@ -10,6 +9,7 @@ export function UpcomingMatchesSection({ matches, onMatchClick }) {
         matches={matches}
         onMatchClick={onMatchClick}
         emptyText="Нет upcoming-матчей."
+        variant="board"
       />
     </section>
   );

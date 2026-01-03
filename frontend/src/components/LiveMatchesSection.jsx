@@ -1,4 +1,3 @@
-// src/components/LiveMatchesSection.jsx
 import React from "react";
 import { MatchesTable } from "./MatchesTable";
 
@@ -10,6 +9,7 @@ export function LiveMatchesSection({ matches, onMatchClick }) {
         matches={matches}
         onMatchClick={onMatchClick}
         emptyText="Нет live-матчей."
+        variant="board"
       />
     </section>
   );

@@ -9,9 +9,12 @@ import MatchDetailsModal from "../components/MatchDetailsModal";
 
 const DEFAULT_REFRESH_SECONDS = 30;
 
-// фиксированное окно для доски (без UI)
-const BOARD_DAYS_BACK = 7;
-const BOARD_DAYS_AHEAD = 7;
+// “оперативное” окно для live/upcoming
+const MAIN_DAYS_BACK = 1;
+const MAIN_DAYS_AHEAD = 2;
+
+// recent листаем неделями
+const WEEK_SIZE_DAYS = 7;
 
 function normalizeDefaultLeagues(defaultLeagues) {
   if (Array.isArray(defaultLeagues) && defaultLeagues.length > 0) {
@@ -23,9 +26,7 @@ function normalizeDefaultLeagues(defaultLeagues) {
 function uniq(arr) {
   return Array.from(
     new Set(
-      (Array.isArray(arr) ? arr : [])
-        .map((x) => String(x).trim())
-        .filter(Boolean)
+      (Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean)
     )
   );
 }
@@ -38,23 +39,25 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
 
   const [selectedLeagues, setSelectedLeagues] = useState(() => initialLeagues);
 
-  // “оперативная доска”: сезон фиксируем
+  // сезон фиксируем для доски
   const season = useMemo(() => {
     const n = Number(defaultSeason);
     if (Number.isFinite(n) && n > 2000) return n;
     return new Date().getFullYear();
   }, [defaultSeason]);
 
-  const [board, setBoard] = useState({
-    date_from: null,
-    date_to: null,
-    leagues: [],
-    live: [],
-    upcoming: [],
-    recent: [],
-  });
+  // live/upcoming + мета “main”
+  const [mainMeta, setMainMeta] = useState({ date_from: null, date_to: null, leagues: [] });
+  const [live, setLive] = useState([]);
+  const [upcoming, setUpcoming] = useState([]);
 
-  const [loading, setLoading] = useState(false);
+  // recent “страница”
+  const [recentWeekOffset, setRecentWeekOffset] = useState(0);
+  const [recentMeta, setRecentMeta] = useState({ date_from: null, date_to: null });
+  const [recent, setRecent] = useState([]);
+
+  const [loadingMain, setLoadingMain] = useState(false);
+  const [loadingRecent, setLoadingRecent] = useState(false);
   const [error, setError] = useState(null);
 
   // modal state
@@ -73,49 +76,89 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
   const refreshMs =
     Math.max(0, Number(refreshSeconds ?? DEFAULT_REFRESH_SECONDS)) * 1000;
 
-  const loadBoard = async (params, { showLoader = false } = {}) => {
-    if (showLoader) setLoading(true);
+  const loadMain = async ({ showLoader = false } = {}) => {
+    if (showLoader) setLoadingMain(true);
     try {
       setError(null);
-      const data = await fetchBoard(params);
+      const data = await fetchBoard({
+        leagues: selectedLeagues,
+        season,
+        daysBack: MAIN_DAYS_BACK,
+        daysAhead: MAIN_DAYS_AHEAD,
+      });
 
-      setBoard({
+      setMainMeta({
         date_from: data.date_from || null,
         date_to: data.date_to || null,
         leagues: data.leagues || [],
-        live: data.live || [],
-        upcoming: data.upcoming || [],
-        recent: data.recent || [],
       });
+      setLive(data.live || []);
+      setUpcoming(data.upcoming || []);
     } catch (e) {
-      console.error("Failed to fetch board:", e);
+      console.error("Failed to fetch main board:", e);
       setError(e?.message || "Ошибка загрузки данных.");
     } finally {
-      if (showLoader) setLoading(false);
+      if (showLoader) setLoadingMain(false);
     }
   };
 
-  useEffect(() => {
-    const params = {
-      leagues: selectedLeagues,
-      season,
-      daysBack: BOARD_DAYS_BACK,
-      daysAhead: BOARD_DAYS_AHEAD,
-    };
+  const loadRecentWeek = async (weekOffset, { showLoader = false } = {}) => {
+    if (showLoader) setLoadingRecent(true);
+    try {
+      setError(null);
 
-    loadBoard(params, { showLoader: true });
+      const daysBack = (weekOffset + 1) * WEEK_SIZE_DAYS;
+      const daysAhead = weekOffset * WEEK_SIZE_DAYS;
+
+      const data = await fetchBoard({
+        leagues: selectedLeagues,
+        season,
+        daysBack,
+        daysAhead,
+      });
+
+      setRecentMeta({
+        date_from: data.date_from || null,
+        date_to: data.date_to || null,
+      });
+      setRecent(data.recent || []);
+    } catch (e) {
+      console.error("Failed to fetch recent week:", e);
+      setError(e?.message || "Ошибка загрузки данных.");
+    } finally {
+      if (showLoader) setLoadingRecent(false);
+    }
+  };
+
+  // при смене лиг/сезона — main + recent(0), и таймер только для main
+  useEffect(() => {
+    setRecentWeekOffset(0);
+
+    (async () => {
+      await Promise.all([
+        loadMain({ showLoader: true }),
+        loadRecentWeek(0, { showLoader: true }),
+      ]);
+    })();
 
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (refreshMs > 0) {
       intervalRef.current = setInterval(() => {
-        loadBoard(params, { showLoader: false });
+        loadMain({ showLoader: false });
       }, refreshMs);
     }
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLeagues, season, refreshMs]);
+
+  // листаем recent — отдельная загрузка
+  useEffect(() => {
+    loadRecentWeek(recentWeekOffset, { showLoader: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recentWeekOffset]);
 
   const handleFiltersChange = ({ leagues }) => {
     const fallback = normalizeDefaultLeagues(defaultLeagues);
@@ -138,12 +181,18 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     setSelectedMatch(null);
   };
 
+  const recentRangeText =
+    recentMeta.date_from && recentMeta.date_to
+      ? `${recentMeta.date_from} — ${recentMeta.date_to}`
+      : "—";
+
   const isEmpty =
-    !loading &&
+    !loadingMain &&
+    !loadingRecent &&
     !error &&
-    (board.live?.length ?? 0) === 0 &&
-    (board.upcoming?.length ?? 0) === 0 &&
-    (board.recent?.length ?? 0) === 0;
+    (live?.length ?? 0) === 0 &&
+    (upcoming?.length ?? 0) === 0 &&
+    (recent?.length ?? 0) === 0;
 
   return (
     <div className="board-page">
@@ -156,6 +205,7 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
         onReset={handleResetDefaults}
         leagueOptions={leagueOptions}
         showSeason={false}
+        showDaysRange={false}
       />
 
       <section className="controls" style={{ marginTop: 12 }}>
@@ -165,17 +215,17 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
         </div>
 
         <div className="control">
-          <label>Окно</label>
+          <label>Live/Upcoming окно</label>
           <div style={{ paddingTop: 10 }}>
-            {BOARD_DAYS_BACK} назад / {BOARD_DAYS_AHEAD} вперёд
+            {MAIN_DAYS_BACK} назад / {MAIN_DAYS_AHEAD} вперёд
           </div>
         </div>
 
         <div className="control">
-          <label>Диапазон</label>
+          <label>Live/Upcoming диапазон</label>
           <div style={{ paddingTop: 10 }}>
-            {board.date_from && board.date_to
-              ? `${board.date_from} — ${board.date_to}`
+            {mainMeta.date_from && mainMeta.date_to
+              ? `${mainMeta.date_from} — ${mainMeta.date_to}`
               : "—"}
           </div>
         </div>
@@ -183,34 +233,39 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
         <div className="control">
           <label>Лиги (факт из API)</label>
           <div style={{ paddingTop: 10 }}>
-            {Array.isArray(board.leagues) && board.leagues.length > 0
-              ? board.leagues.join(", ")
+            {Array.isArray(mainMeta.leagues) && mainMeta.leagues.length > 0
+              ? mainMeta.leagues.join(", ")
               : "—"}
           </div>
         </div>
       </section>
 
-      {loading && <p>Загрузка...</p>}
+      {(loadingMain || loadingRecent) && <p>Загрузка...</p>}
       {error && <p style={{ color: "red" }}>Ошибка: {error}</p>}
 
       {isEmpty && (
         <div className="card" style={{ marginTop: 12 }}>
           <p style={{ margin: 0 }}>
-            Матчей не найдено в фиксированном окне дат. Для расширенных выборок
-            используйте Архив.
+            Матчей не найдено. Попробуйте выбрать другие лиги или перейти на прошлую
+            неделю в блоке Recent.
           </p>
         </div>
       )}
 
-      <LiveMatchesSection matches={board.live} onMatchClick={handleMatchClick} />
-      <UpcomingMatchesSection matches={board.upcoming} onMatchClick={handleMatchClick} />
-      <RecentMatchesSection matches={board.recent} onMatchClick={handleMatchClick} />
+      <LiveMatchesSection matches={live} onMatchClick={handleMatchClick} />
+      <UpcomingMatchesSection matches={upcoming} onMatchClick={handleMatchClick} />
 
-      <MatchDetailsModal
-        isOpen={isModalOpen}
-        onClose={closeModal}
-        match={selectedMatch}
+      <RecentMatchesSection
+        matches={recent}
+        onMatchClick={handleMatchClick}
+        weekOffset={recentWeekOffset}
+        rangeText={recentRangeText}
+        isLoading={loadingRecent}
+        onPrevWeek={() => setRecentWeekOffset((w) => w + 1)} // старее
+        onNextWeek={() => setRecentWeekOffset((w) => Math.max(0, w - 1))} // ближе
       />
+
+      <MatchDetailsModal isOpen={isModalOpen} onClose={closeModal} match={selectedMatch} />
     </div>
   );
 }
