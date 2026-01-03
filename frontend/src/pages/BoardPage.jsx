@@ -1,7 +1,6 @@
-// src/pages/BoardPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchBoard } from "../api";
-import { BoardFilters } from "../components/BoardFilters";
+import BoardHeader from "../components/BoardHeader";
 import { LiveMatchesSection } from "../components/LiveMatchesSection";
 import { UpcomingMatchesSection } from "../components/UpcomingMatchesSection";
 import { RecentMatchesSection } from "../components/RecentMatchesSection";
@@ -51,7 +50,11 @@ function formatDateRangeFromMatches(matches) {
   const min = new Date(Math.min(...times));
   const max = new Date(Math.max(...times));
   const fmt = (d) =>
-    d.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+    d.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
   return `${fmt(min)} — ${fmt(max)}`;
 }
 
@@ -76,8 +79,8 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
   const [upcoming, setUpcoming] = useState([]);
 
   // recent history + pagination by rounds
-  const [recentHistory, setRecentHistory] = useState([]); // все recent матчи из истории
-  const [recentRounds, setRecentRounds] = useState([]);   // уникальные group_order_id по убыванию
+  const [recentHistory, setRecentHistory] = useState([]);
+  const [recentRounds, setRecentRounds] = useState([]);
   const [recentPageIndex, setRecentPageIndex] = useState(0);
 
   const [loadingMain, setLoadingMain] = useState(false);
@@ -97,8 +100,9 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     return merged.map((x) => ({ value: x, label: x.toUpperCase() }));
   }, [defaultLeagues]);
 
-  const refreshMs =
-    Math.max(0, Number(refreshSeconds ?? DEFAULT_REFRESH_SECONDS)) * 1000;
+  const allLeagues = useMemo(() => leagueOptions.map((x) => x.value), [leagueOptions]);
+
+  const refreshMs = Math.max(0, Number(refreshSeconds ?? DEFAULT_REFRESH_SECONDS)) * 1000;
 
   const loadMain = async ({ showLoader = false } = {}) => {
     if (showLoader) setLoadingMain(true);
@@ -131,7 +135,6 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     try {
       setError(null);
 
-      // ВАЖНО: daysAhead=0, иначе диапазон будет “ползти вперёд” и раздуваться
       const attempt = async (daysBack) => {
         return fetchBoard({
           leagues: selectedLeagues,
@@ -145,7 +148,6 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
       try {
         data = await attempt(RECENT_HISTORY_DAYS_PRIMARY);
       } catch (e) {
-        // fallback на случай, если бэк ограничивает days_back
         data = await attempt(RECENT_HISTORY_DAYS_FALLBACK);
       }
 
@@ -169,18 +171,13 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     }
   };
 
-  // on leagues/season change: reload main + recent history; reset recent page index
   useEffect(() => {
     setRecentPageIndex(0);
 
     (async () => {
-      await Promise.all([
-        loadMain({ showLoader: true }),
-        loadRecentHistory({ showLoader: true }),
-      ]);
+      await Promise.all([loadMain({ showLoader: true }), loadRecentHistory({ showLoader: true })]);
     })();
 
-    // таймер автообновления только для live/upcoming
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (refreshMs > 0) {
       intervalRef.current = setInterval(() => {
@@ -194,16 +191,6 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLeagues, season, refreshMs]);
 
-  const handleFiltersChange = ({ leagues }) => {
-    const fallback = normalizeDefaultLeagues(defaultLeagues);
-    const nextLeagues = Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback;
-    setSelectedLeagues(nextLeagues);
-  };
-
-  const handleResetDefaults = () => {
-    setSelectedLeagues(initialLeagues);
-  };
-
   const handleMatchClick = (match) => {
     setSelectedMatch(match);
     setIsModalOpen(true);
@@ -214,7 +201,6 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
     setSelectedMatch(null);
   };
 
-  // derive current page rounds (3 rounds)
   const currentRoundIds = useMemo(() => {
     const start = recentPageIndex * RECENT_ROUNDS_PER_PAGE;
     const end = start + RECENT_ROUNDS_PER_PAGE;
@@ -263,49 +249,36 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
 
   return (
     <div className="board-page">
-      <h2>Спортивная доска</h2>
-
-      <BoardFilters
-        valueLeagues={selectedLeagues}
-        valueSeason={String(season)}
-        onChange={handleFiltersChange}
-        onReset={handleResetDefaults}
-        leagueOptions={leagueOptions}
-        showSeason={false}
-        showDaysRange={false}
-      />
-
-      <section className="controls" style={{ marginTop: 12 }}>
-        <div className="control">
-          <label>Сезон</label>
-          <div style={{ paddingTop: 10 }}>{season}</div>
-        </div>
-
-        <div className="control">
-          <label>Live/Upcoming окно</label>
-          <div style={{ paddingTop: 10 }}>
-            {MAIN_DAYS_BACK} назад / {MAIN_DAYS_AHEAD} вперёд
-          </div>
-        </div>
-
-        <div className="control">
-          <label>Live/Upcoming диапазон</label>
-          <div style={{ paddingTop: 10 }}>
-            {mainMeta.date_from && mainMeta.date_to
+      <BoardHeader
+        leaguesAll={allLeagues}
+        selectedLeagues={selectedLeagues}
+        onSelectedLeaguesChange={(leagues) => {
+          const fallback = normalizeDefaultLeagues(defaultLeagues);
+          setSelectedLeagues(Array.isArray(leagues) && leagues.length > 0 ? leagues : fallback);
+        }}
+        seasonValue=""
+        seasons={[]}
+        onSeasonChange={() => {}}
+        onApply={() => {
+          loadMain({ showLoader: true });
+          loadRecentHistory({ showLoader: true });
+        }}
+        onReset={() => {
+          setSelectedLeagues(initialLeagues);
+        }}
+        stats={{
+          season: String(season),
+          windowText: `${MAIN_DAYS_BACK} назад / ${MAIN_DAYS_AHEAD} вперёд`,
+          rangeText:
+            mainMeta.date_from && mainMeta.date_to
               ? `${mainMeta.date_from} — ${mainMeta.date_to}`
-              : "—"}
-          </div>
-        </div>
-
-        <div className="control">
-          <label>Лиги (факт из API)</label>
-          <div style={{ paddingTop: 10 }}>
-            {Array.isArray(mainMeta.leagues) && mainMeta.leagues.length > 0
+              : "—",
+          leaguesFromApiText:
+            Array.isArray(mainMeta.leagues) && mainMeta.leagues.length > 0
               ? mainMeta.leagues.join(", ")
-              : "—"}
-          </div>
-        </div>
-      </section>
+              : "—",
+        }}
+      />
 
       {(loadingMain || loadingRecent) && <p>Загрузка...</p>}
       {error && <p style={{ color: "red" }}>Ошибка: {error}</p>}
@@ -313,8 +286,8 @@ export function BoardPage({ defaultLeagues, defaultSeason, refreshSeconds }) {
       {isEmpty && (
         <div className="card" style={{ marginTop: 12 }}>
           <p style={{ margin: 0 }}>
-            Матчей не найдено. Попробуйте выбрать другие лиги или нажмите “Старее →”
-            в блоке Recent, если история не попала в первые туры.
+            Матчей не найдено. Попробуйте выбрать другие лиги или нажмите “Старее →” в блоке Recent,
+            если история не попала в первые туры.
           </p>
         </div>
       )}

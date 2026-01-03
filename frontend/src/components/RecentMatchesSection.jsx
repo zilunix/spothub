@@ -27,48 +27,46 @@ export function RecentMatchesSection({
       : `Туры: —`;
 
   return (
-    <section style={{ marginTop: 16 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <h3 style={{ marginBottom: 4 }}>Recent</h3>
-          <div style={{ opacity: 0.75, fontSize: 12 }}>
-            {roundsLabel} • По {pageSizeRounds} тура • Диапазон: {rangeText}
-            {isLoading ? " • обновление…" : ""}
-          </div>
+    <section className="board-block recent-block">
+      <div className="board-block__head recent-head">
+        <div className="board-block__title recent-title">
+          <h3 className="board-block__h3 recent-h3">Recent</h3>
+          <span className="board-pill">{groups?.length ?? 0}</span>
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={onNewer} disabled={!hasNewer}>
+        <div className="recent-nav">
+          <button
+            type="button"
+            className="recent-btn recent-btn-ghost"
+            onClick={onNewer}
+            disabled={!hasNewer}
+          >
             ← Ближе
           </button>
-          <button type="button" onClick={onOlder} disabled={!hasOlder}>
+
+          <button
+            type="button"
+            className="recent-btn recent-btn-primary"
+            onClick={onOlder}
+            disabled={!hasOlder}
+          >
             Старее →
           </button>
         </div>
       </div>
 
+      <div className="recent-sub" style={{ marginBottom: 10 }}>
+        {roundsLabel} • По {pageSizeRounds} тура • Диапазон: {rangeText}
+        {isLoading ? " • обновление…" : ""}
+      </div>
+
       {groups.length === 0 ? (
-        <div>Нет recent-матчей.</div>
+        <div className="board-empty">Нет recent-матчей.</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="recent-groups">
           {groups.map((g) => (
             <div key={g.round}>
-              <div
-                style={{
-                  opacity: 0.85,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  letterSpacing: 0.3,
-                }}
-              >
+              <div className="recent-round-title">
                 {"=".repeat(11)} {g.round} тур {"=".repeat(11)}
               </div>
 
